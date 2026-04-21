@@ -1,0 +1,136 @@
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Bell, MessageSquare, Plus, Search as SearchIcon, User as UserIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CategoryBar } from "./CategoryBar";
+import { CreateSheet } from "../sheets/CreateSheet";
+import { SignUpSheet } from "../sheets/SignUpSheet";
+import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+
+const PRIMARY_TABS = [
+  { to: "/", label: "Discover" },
+  { to: "/following", label: "Following" },
+  { to: "/broadcasts", label: "Broadcasts" },
+  { to: "/boards", label: "Trip Boards" },
+] as const;
+
+export function AppShell() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [createOpen, setCreateOpen] = useState(false);
+  const { user, promptSignUp } = useAuth();
+
+  const showCategories = location.pathname === "/" || location.pathname === "/following";
+
+  // Reset scroll on route change
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  const handleProtected = (path: string) => {
+    if (!user) {
+      promptSignUp();
+      return;
+    }
+    navigate(path);
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* Top bar */}
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md">
+        <div className="mx-auto w-full max-w-[480px] px-4 pt-3 pb-2">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => navigate("/")}
+              className="text-2xl font-extrabold tracking-tight text-foreground"
+              aria-label="travelpod home"
+            >
+              travelpod
+            </button>
+            <nav className="flex items-center gap-1" aria-label="Primary actions">
+              <IconButton label="Create" onClick={() => (user ? setCreateOpen(true) : promptSignUp())} ring>
+                <Plus className="h-5 w-5" />
+              </IconButton>
+              <IconButton label="Search" onClick={() => navigate("/search")}>
+                <SearchIcon className="h-5 w-5" />
+              </IconButton>
+              <IconButton label="Notifications" onClick={() => handleProtected("/notifications")}>
+                <Bell className="h-5 w-5" />
+              </IconButton>
+              <IconButton label="Messages" onClick={() => handleProtected("/messages")}>
+                <MessageSquare className="h-5 w-5" />
+              </IconButton>
+              <IconButton
+                label="Profile"
+                onClick={() => (user ? navigate(`/profile/${user.nametag}`) : promptSignUp())}
+              >
+                <UserIcon className="h-5 w-5" />
+              </IconButton>
+            </nav>
+          </div>
+
+          {/* Primary tabs */}
+          <nav className="mt-3 flex items-center gap-6 text-base" aria-label="Feed">
+            {PRIMARY_TABS.map((tab) => (
+              <NavLink
+                key={tab.to}
+                to={tab.to}
+                end
+                className={({ isActive }) =>
+                  cn(
+                    "relative pb-2 font-semibold transition-colors",
+                    isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground/80",
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {tab.label}
+                    {isActive && (
+                      <span className="absolute -bottom-px left-0 right-2 h-0.5 rounded-full bg-foreground" />
+                    )}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+
+        {showCategories && <CategoryBar />}
+      </header>
+
+      <main className="mx-auto w-full max-w-[480px] flex-1">
+        <Outlet />
+      </main>
+
+      <CreateSheet open={createOpen} onOpenChange={setCreateOpen} />
+      <SignUpSheet />
+    </div>
+  );
+}
+
+function IconButton({
+  children,
+  onClick,
+  label,
+  ring,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  label: string;
+  ring?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        "flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-accent",
+        ring && "border border-foreground/40",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
