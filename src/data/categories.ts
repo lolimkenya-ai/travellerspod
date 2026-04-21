@@ -1,3 +1,5 @@
+// Default category list — also seeded into the DB `categories` table.
+// We keep this here as a fallback for when the DB hasn't loaded yet.
 export const CATEGORIES = [
   "All",
   "Destinations",
@@ -12,3 +14,9 @@ export const CATEGORIES = [
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
+
+export interface DbCategory {
+  slug: string;
+  label: string;
+  sort_order: number;
+}

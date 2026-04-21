@@ -18,6 +18,10 @@ import Notifications from "./pages/Notifications";
 import Messages from "./pages/Messages";
 import MessageThread from "./pages/MessageThread";
 import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
+import EditProfile from "./pages/EditProfile";
+import EditBusiness from "./pages/EditBusiness";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -45,6 +49,10 @@ const App = () => (
                   <Route path="/messages" element={<Messages />} />
                   <Route path="/messages/:id" element={<MessageThread />} />
                   <Route path="/profile/:nametag" element={<Profile />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/settings/profile" element={<EditProfile />} />
+                  <Route path="/settings/business" element={<EditBusiness />} />
+                  <Route path="/admin" element={<Admin />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </CategoryProvider>
