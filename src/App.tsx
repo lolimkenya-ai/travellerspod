@@ -7,6 +7,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SeenPostsProvider } from "./contexts/SeenPostsContext";
 import { BoardsProvider } from "./contexts/BoardsContext";
+import { CategoryProvider } from "./contexts/CategoryContext";
 import Discover from "./pages/Discover";
 import Following from "./pages/Following";
 import Broadcasts from "./pages/Broadcasts";
@@ -30,21 +31,23 @@ const App = () => (
         <AuthProvider>
           <BoardsProvider>
             <SeenPostsProvider>
-              <Routes>
-                <Route element={<AppShell />}>
-                  <Route path="/" element={<Discover />} />
-                  <Route path="/following" element={<Following />} />
-                  <Route path="/broadcasts" element={<Broadcasts />} />
-                  <Route path="/boards" element={<Boards />} />
-                </Route>
-                <Route path="/boards/:id" element={<BoardDetail />} />
-                <Route path="/search" element={<Search />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/messages" element={<Messages />} />
-                <Route path="/messages/:id" element={<MessageThread />} />
-                <Route path="/profile/:nametag" element={<Profile />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+              <CategoryProvider>
+                <Routes>
+                  <Route element={<AppShell />}>
+                    <Route path="/" element={<Discover />} />
+                    <Route path="/following" element={<Following />} />
+                    <Route path="/broadcasts" element={<Broadcasts />} />
+                    <Route path="/boards" element={<Boards />} />
+                  </Route>
+                  <Route path="/boards/:id" element={<BoardDetail />} />
+                  <Route path="/search" element={<Search />} />
+                  <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/messages" element={<Messages />} />
+                  <Route path="/messages/:id" element={<MessageThread />} />
+                  <Route path="/profile/:nametag" element={<Profile />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </CategoryProvider>
             </SeenPostsProvider>
           </BoardsProvider>
         </AuthProvider>

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { CATEGORIES } from "@/data/categories";
 import { useCategoryFilter } from "@/contexts/CategoryContext";
 import { cn } from "@/lib/utils";
