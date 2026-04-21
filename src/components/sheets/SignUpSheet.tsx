@@ -1,89 +1,174 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
-import { Mail } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { z } from "zod";
+
+const credSchema = z.object({
+  email: z.string().trim().email("Enter a valid email").max(255),
+  password: z.string().min(8, "At least 8 characters").max(72),
+  display_name: z.string().trim().min(1, "Required").max(60).optional(),
+});
+
+type Mode = "choose" | "signup" | "signin";
 
 export function SignUpSheet() {
-  const { showSignUp, closeSignUp, signIn } = useAuth();
+  const { showSignUp, closeSignUp, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
+  const [mode, setMode] = useState<Mode>("choose");
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState<"start" | "otp">("start");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [accountType, setAccountType] = useState<"personal" | "business" | "organization">("personal");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function reset() {
+    setMode("choose");
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+    setErr(null);
+    setBusy(false);
+  }
+
+  async function handleSubmit() {
+    setErr(null);
+    const parse = credSchema.safeParse({
+      email,
+      password,
+      display_name: mode === "signup" ? displayName : undefined,
+    });
+    if (!parse.success) {
+      setErr(parse.error.errors[0]?.message ?? "Invalid input");
+      return;
+    }
+    setBusy(true);
+    const res =
+      mode === "signup"
+        ? await signUpWithEmail(email, password, {
+            display_name: displayName || email.split("@")[0],
+            account_type: accountType,
+          })
+        : await signInWithEmail(email, password);
+    setBusy(false);
+    if (res.error) setErr(res.error);
+    else reset();
+  }
 
   return (
-    <Sheet open={showSignUp} onOpenChange={(o) => !o && closeSignUp()}>
+    <Sheet open={showSignUp} onOpenChange={(o) => { if (!o) { closeSignUp(); reset(); } }}>
       <SheetContent side="bottom" className="h-auto rounded-t-2xl border-border bg-card p-0">
         <SheetHeader className="border-b border-border px-4 py-3 text-left">
-          <SheetTitle>Join travelpod</SheetTitle>
+          <SheetTitle>{mode === "signin" ? "Sign in to travelpod" : "Join travelpod"}</SheetTitle>
         </SheetHeader>
+
         <div className="space-y-4 p-5">
-          <p className="text-sm text-muted-foreground">
-            Sign in to like, comment, save to Trip Boards, and message creators & businesses.
-          </p>
+          {mode === "choose" && (
+            <p className="text-sm text-muted-foreground">
+              Sign in to like, comment, save to Trip Boards, and message creators & businesses.
+            </p>
+          )}
 
-          {step === "start" ? (
+          <button
+            onClick={signInWithGoogle}
+            className="flex w-full items-center justify-center gap-3 rounded-full bg-foreground py-3 text-sm font-semibold text-background hover:bg-foreground/90"
+          >
+            <GoogleGlyph />
+            Continue with Google
+          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">or</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {mode === "signup" && (
             <>
-              <button
-                onClick={signIn}
-                className="flex w-full items-center justify-center gap-3 rounded-full bg-foreground py-3 text-sm font-semibold text-background hover:bg-foreground/90"
-              >
-                <GoogleGlyph />
-                Continue with Google
-              </button>
-
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-border" />
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">or</span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-
-              <div className="space-y-2">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@email.com"
-                  className="w-full rounded-full border border-border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  onClick={() => email && setStep("otp")}
-                  disabled={!email}
-                  className="flex w-full items-center justify-center gap-2 rounded-full border border-border py-3 text-sm font-semibold text-foreground hover:bg-accent disabled:opacity-40"
-                >
-                  <Mail className="h-4 w-4" /> Continue with email
-                </button>
-              </div>
-
-              <button
-                onClick={closeSignUp}
-                className="block w-full pt-1 text-center text-xs text-muted-foreground hover:text-foreground"
-              >
-                Continue browsing as guest
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-foreground">
-                We sent a 6-digit code to <span className="font-semibold">{email}</span>.
-              </p>
               <input
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="••••••"
-                className="w-full rounded-full border border-border bg-muted px-4 py-3 text-center text-lg tracking-[0.5em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Display name"
+                maxLength={60}
+                className="w-full rounded-full border border-border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
+              <div className="flex gap-2">
+                {(["personal", "business", "organization"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setAccountType(t)}
+                    className={`flex-1 rounded-full border px-2 py-2 text-xs font-semibold capitalize transition-colors ${
+                      accountType === t
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {mode !== "choose" && (
+            <>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@email.com"
+                className="w-full rounded-full border border-border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password (min 8 chars)"
+                className="w-full rounded-full border border-border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {err && <p className="text-xs text-destructive">{err}</p>}
               <button
-                onClick={signIn}
-                className="w-full rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground"
+                onClick={handleSubmit}
+                disabled={busy}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                Verify & continue
-              </button>
-              <button
-                onClick={() => setStep("start")}
-                className="block w-full pt-1 text-center text-xs text-muted-foreground hover:text-foreground"
-              >
-                Use a different email
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                {mode === "signup" ? "Create account" : "Sign in"}
               </button>
             </>
           )}
+
+          {mode === "choose" ? (
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setMode("signup")}
+                className="w-full rounded-full border border-border py-3 text-sm font-semibold text-foreground hover:bg-accent"
+              >
+                Sign up with email
+              </button>
+              <button
+                onClick={() => setMode("signin")}
+                className="w-full pt-1 text-center text-xs text-muted-foreground hover:text-foreground"
+              >
+                Already have an account? Sign in
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
+              className="block w-full pt-1 text-center text-xs text-muted-foreground hover:text-foreground"
+            >
+              {mode === "signup" ? "Already have an account? Sign in" : "Need an account? Sign up"}
+            </button>
+          )}
+
+          <button
+            onClick={() => { closeSignUp(); reset(); }}
+            className="block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+          >
+            Continue browsing as guest
+          </button>
         </div>
       </SheetContent>
     </Sheet>
