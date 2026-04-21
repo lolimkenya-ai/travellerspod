@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Bell, MessageSquare, Plus, Search as SearchIcon, User as UserIcon } from "lucide-react";
+import { Bell, MessageSquare, Plus, Search as SearchIcon, Settings as SettingsIcon, User as UserIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CategoryBar } from "./CategoryBar";
 import { CreateSheet } from "../sheets/CreateSheet";
 import { SignUpSheet } from "../sheets/SignUpSheet";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import { cn } from "@/lib/utils";
 
 const PRIMARY_TABS = [
@@ -19,6 +20,7 @@ export function AppShell() {
   const location = useLocation();
   const [createOpen, setCreateOpen] = useState(false);
   const { user, profile, promptSignUp } = useAuth();
+  const { notif, msgs } = useUnreadCounts();
 
   const showCategories = location.pathname === "/" || location.pathname === "/following";
 
@@ -55,12 +57,17 @@ export function AppShell() {
               <IconButton label="Search" onClick={() => navigate("/search")}>
                 <SearchIcon className="h-5 w-5" />
               </IconButton>
-              <IconButton label="Notifications" onClick={() => handleProtected("/notifications")}>
+              <IconButton label="Notifications" onClick={() => handleProtected("/notifications")} badge={notif}>
                 <Bell className="h-5 w-5" />
               </IconButton>
-              <IconButton label="Messages" onClick={() => handleProtected("/messages")}>
+              <IconButton label="Messages" onClick={() => handleProtected("/messages")} badge={msgs}>
                 <MessageSquare className="h-5 w-5" />
               </IconButton>
+              {user && (
+                <IconButton label="Settings" onClick={() => navigate("/settings")}>
+                  <SettingsIcon className="h-5 w-5" />
+                </IconButton>
+              )}
               <IconButton
                 label="Profile"
                 onClick={() => (profile ? navigate(`/profile/${profile.nametag}`) : promptSignUp())}
@@ -115,22 +122,29 @@ function IconButton({
   onClick,
   label,
   ring,
+  badge,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   label: string;
   ring?: boolean;
+  badge?: number;
 }) {
   return (
     <button
       onClick={onClick}
       aria-label={label}
       className={cn(
-        "flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-accent",
+        "relative flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:bg-accent",
         ring && "border border-foreground/40",
       )}
     >
       {children}
+      {badge && badge > 0 ? (
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      ) : null}
     </button>
   );
 }
