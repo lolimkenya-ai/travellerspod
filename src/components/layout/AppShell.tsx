@@ -18,7 +18,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [createOpen, setCreateOpen] = useState(false);
-  const { user, promptSignUp } = useAuth();
+  const { user, profile, promptSignUp } = useAuth();
 
   const showCategories = location.pathname === "/" || location.pathname === "/following";
 
@@ -63,7 +63,7 @@ export function AppShell() {
               </IconButton>
               <IconButton
                 label="Profile"
-                onClick={() => (user ? navigate(`/profile/${user.nametag}`) : promptSignUp())}
+                onClick={() => (profile ? navigate(`/profile/${profile.nametag}`) : promptSignUp())}
               >
                 <UserIcon className="h-5 w-5" />
               </IconButton>
