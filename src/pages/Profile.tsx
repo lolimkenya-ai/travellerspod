@@ -1,11 +1,15 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BadgeCheck, MapPin, Settings, Briefcase } from "lucide-react";
-import { useState } from "react";
-import { ALL_USERS } from "@/data/users";
-import { POSTS } from "@/data/posts";
-import { useBoards } from "@/contexts/BoardsContext";
+import { ArrowLeft, BadgeCheck, Settings, Briefcase, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth, useRequireAuth } from "@/contexts/AuthContext";
 import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { VerifiedBusinessModal } from "@/components/profile/VerifiedBusinessModal";
+import { toast } from "sonner";
+import type { Database } from "@/integrations/supabase/types";
+
+type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
 const TABS = ["Posts", "Reposts", "Boards"] as const;
 type Tab = (typeof TABS)[number];
@@ -13,11 +17,98 @@ type Tab = (typeof TABS)[number];
 export default function Profile() {
   const { nametag = "" } = useParams();
   const navigate = useNavigate();
-  const user = ALL_USERS.find((u) => u.nametag === nametag) ?? ALL_USERS[0];
-  const [tab, setTab] = useState<Tab>("Posts");
-  const { boards } = useBoards();
+  const { user, profile: meProfile, signOut } = useAuth();
+  const requireAuth = useRequireAuth();
 
-  const posts = POSTS.filter((p) => p.authorId === user.id);
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>("Posts");
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [bizOpen, setBizOpen] = useState(false);
+
+  const isMe = !!meProfile && meProfile.nametag === nametag;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const { data: p } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("nametag", nametag)
+        .maybeSingle();
+      if (cancelled) return;
+      setProfile(p);
+      setLoading(false);
+
+      if (p && user && user.id !== p.id) {
+        const { data: f } = await supabase
+          .from("follows")
+          .select("follower_id")
+          .eq("follower_id", user.id)
+          .eq("followee_id", p.id)
+          .maybeSingle();
+        if (!cancelled) setFollowing(!!f);
+      } else {
+        setFollowing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [nametag, user]);
+
+  async function toggleFollow() {
+    if (!profile) return;
+    requireAuth(async () => {
+      if (!user || user.id === profile.id) return;
+      setFollowBusy(true);
+      if (following) {
+        const { error } = await supabase
+          .from("follows")
+          .delete()
+          .eq("follower_id", user.id)
+          .eq("followee_id", profile.id);
+        if (error) toast.error(error.message);
+        else {
+          setFollowing(false);
+          setProfile((p) => p && { ...p, followers_count: Math.max(0, p.followers_count - 1) });
+        }
+      } else {
+        const { error } = await supabase
+          .from("follows")
+          .insert({ follower_id: user.id, followee_id: profile.id });
+        if (error) toast.error(error.message);
+        else {
+          setFollowing(true);
+          setProfile((p) => p && { ...p, followers_count: p.followers_count + 1 });
+        }
+      }
+      setFollowBusy(false);
+    });
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="mx-auto min-h-screen max-w-[480px] bg-background p-6 text-center">
+        <button onClick={() => navigate(-1)} className="mb-4 text-sm text-muted-foreground">
+          ← Back
+        </button>
+        <p className="text-foreground">Profile not found.</p>
+      </div>
+    );
+  }
+
+  const isBusiness = profile.account_type === "business";
 
   return (
     <div className="mx-auto min-h-screen max-w-[480px] bg-background">
@@ -25,55 +116,84 @@ export default function Profile() {
         <button onClick={() => navigate(-1)} aria-label="Back" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <h1 className="text-sm font-semibold text-foreground">@{user.nametag}</h1>
-        <button aria-label="Settings" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent">
+        <h1 className="text-sm font-semibold text-foreground">@{profile.nametag}</h1>
+        <button
+          aria-label="Settings"
+          onClick={isMe ? () => signOut() : undefined}
+          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent"
+        >
           <Settings className="h-5 w-5" />
         </button>
       </header>
 
       <div className="px-4 pt-5">
         <div className="flex items-start gap-4">
-          <img src={user.avatar} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-border" />
+          <img
+            src={
+              profile.avatar_url ??
+              `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.display_name)}`
+            }
+            alt=""
+            className="h-20 w-20 rounded-full object-cover ring-2 ring-border"
+          />
           <div className="flex-1 pt-1">
-            <div className="flex items-center gap-1">
-              <h2 className="text-lg font-bold text-foreground">{user.displayName}</h2>
-              {user.verified && <BadgeCheck className="h-5 w-5 fill-verified text-verified-foreground" />}
-            </div>
-            <p className="text-sm text-muted-foreground">@{user.nametag}</p>
-            <div className="mt-2 flex items-center gap-2">
-              {user.accountType === "business" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-verified/15 px-2 py-0.5 text-xs font-semibold text-verified">
-                  <Briefcase className="h-3 w-3" /> Business · {user.category}
-                </span>
-              )}
-              {user.accountType === "organization" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
-                  Organization
-                </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-foreground">{profile.display_name}</h2>
+              {profile.verified && isBusiness && (
+                <button
+                  onClick={() => setBizOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-full bg-verified/15 px-2 py-0.5 text-xs font-semibold text-verified-foreground transition-colors hover:bg-verified/25"
+                  aria-label="View verified business details"
+                >
+                  <BadgeCheck className="h-3.5 w-3.5 fill-verified text-verified-foreground" />
+                  Verified business
+                </button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground">@{profile.nametag}</p>
+            {profile.account_type === "organization" && (
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+                <Briefcase className="h-3 w-3" /> Organization
+              </span>
+            )}
           </div>
         </div>
 
-        {user.bio && <p className="mt-3 text-sm text-foreground">{user.bio}</p>}
+        {profile.bio && <p className="mt-3 text-sm text-foreground">{profile.bio}</p>}
 
         <div className="mt-4 flex items-center gap-5 text-sm">
-          <span><span className="font-semibold text-foreground">{formatCount(user.followers)}</span> <span className="text-muted-foreground">followers</span></span>
-          <span><span className="font-semibold text-foreground">{formatCount(user.following)}</span> <span className="text-muted-foreground">following</span></span>
-          <span><span className="font-semibold text-foreground">{posts.length}</span> <span className="text-muted-foreground">posts</span></span>
+          <span>
+            <span className="font-semibold text-foreground">{formatCount(profile.followers_count)}</span>{" "}
+            <span className="text-muted-foreground">followers</span>
+          </span>
+          <span>
+            <span className="font-semibold text-foreground">{formatCount(profile.following_count)}</span>{" "}
+            <span className="text-muted-foreground">following</span>
+          </span>
         </div>
 
-        <div className="mt-4 flex gap-2">
-          <button className="flex-1 rounded-full bg-foreground py-2 text-sm font-semibold text-background hover:bg-foreground/90">
-            Follow
-          </button>
-          <button
-            onClick={() => navigate(`/messages/conv-${user.id}?to=${user.id}`)}
-            className="flex-1 rounded-full border border-border py-2 text-sm font-semibold text-foreground hover:bg-accent"
-          >
-            Message
-          </button>
-        </div>
+        {!isMe && (
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={toggleFollow}
+              disabled={followBusy}
+              className={cn(
+                "flex-1 rounded-full py-2 text-sm font-semibold transition-colors disabled:opacity-50",
+                following
+                  ? "border border-border bg-muted text-foreground"
+                  : "bg-foreground text-background hover:bg-foreground/90",
+              )}
+            >
+              {following ? "Following" : "Follow"}
+            </button>
+            <button
+              onClick={() => navigate(`/messages/conv-${profile.id}?to=${profile.id}`)}
+              className="flex-1 rounded-full border border-border py-2 text-sm font-semibold text-foreground hover:bg-accent"
+            >
+              Message
+            </button>
+          </div>
+        )}
       </div>
 
       <nav className="mt-6 flex border-b border-border">
@@ -91,57 +211,18 @@ export default function Profile() {
         ))}
       </nav>
 
-      {tab === "Posts" && (
-        <div className="grid grid-cols-3 gap-px bg-border">
-          {posts.map((p) => (
-            <div key={p.id} className="aspect-square overflow-hidden bg-muted">
-              {p.media.type === "image" && <img src={p.media.src} alt="" className="h-full w-full object-cover" />}
-              {p.media.type === "video" && <img src={p.media.poster} alt="" className="h-full w-full object-cover" />}
-              {p.media.type === "text" && (
-                <div
-                  className="flex h-full w-full items-center justify-center p-2 text-[10px] font-bold"
-                  style={{ background: p.media.background, color: p.media.foreground }}
-                >
-                  <p className="line-clamp-4 text-center">{p.caption}</p>
-                </div>
-              )}
-            </div>
-          ))}
-          {posts.length === 0 && (
-            <p className="col-span-3 py-12 text-center text-sm text-muted-foreground">No posts yet.</p>
-          )}
-        </div>
-      )}
+      <p className="py-12 text-center text-sm text-muted-foreground">
+        {tab === "Posts" && "No posts yet."}
+        {tab === "Reposts" && "No reposts yet."}
+        {tab === "Boards" && "No boards yet."}
+      </p>
 
-      {tab === "Reposts" && (
-        <p className="py-12 text-center text-sm text-muted-foreground">No reposts yet.</p>
-      )}
-
-      {tab === "Boards" && (
-        <div className="grid grid-cols-2 gap-3 p-4">
-          {boards.map((b) => (
-            <div key={b.id} className="overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="grid aspect-square grid-cols-2 gap-px bg-border">
-                {Array.from({ length: 4 }).map((_, i) => {
-                  const src = b.cover[i];
-                  return src ? (
-                    <img key={i} src={src} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div key={i} className="h-full w-full bg-muted" />
-                  );
-                })}
-              </div>
-              <div className="p-3">
-                <p className="truncate text-sm font-semibold text-foreground">{b.name}</p>
-                <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                  <MapPin className="h-3 w-3 text-secondary" />
-                  <span className="truncate">{b.location}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <VerifiedBusinessModal
+        open={bizOpen}
+        onOpenChange={setBizOpen}
+        profileId={profile.id}
+        displayName={profile.display_name}
+      />
     </div>
   );
 }
