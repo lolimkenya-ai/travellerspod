@@ -62,7 +62,11 @@ export default function Profile() {
   async function toggleFollow() {
     if (!profile) return;
     requireAuth(async () => {
-      if (!user || user.id === profile.id) return;
+      if (!user) return;
+      if (user.id === profile.id) {
+        toast.error("You can't follow yourself");
+        return;
+      }
       setFollowBusy(true);
       if (following) {
         const { error } = await supabase

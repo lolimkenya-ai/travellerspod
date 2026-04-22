@@ -51,8 +51,16 @@ export function SignUpSheet() {
           })
         : await signInWithEmail(email, password);
     setBusy(false);
-    if (res.error) setErr(res.error);
-    else reset();
+    if (res.error) {
+      setErr(res.error);
+      // If sign-up bounced because the email exists, flip to sign-in so the user
+      // can just hit the button again with the same password.
+      if (mode === "signup" && /already|sign in/i.test(res.error)) {
+        setMode("signin");
+      }
+    } else {
+      reset();
+    }
   }
 
   return (
