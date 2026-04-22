@@ -224,6 +224,7 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
       if (error) throw error;
 
       toast.success("Posted ✈️");
+      window.dispatchEvent(new CustomEvent("posts:changed"));
       onOpenChange(false);
       onCreated?.();
     } catch (e: unknown) {
