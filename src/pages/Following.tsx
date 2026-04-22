@@ -1,14 +1,13 @@
 import { Feed } from "@/components/feed/Feed";
-import { POSTS } from "@/data/posts";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategoryFilter } from "@/contexts/CategoryContext";
-
-// Mocked: pretend the user follows these creators
-const FOLLOWED = ["u1", "u3", "u6"];
+import { usePosts } from "@/hooks/usePosts";
+import { Loader2 } from "lucide-react";
 
 export default function Following() {
   const { user, promptSignUp } = useAuth();
   const { active } = useCategoryFilter();
+  const { posts, loading } = usePosts({ scope: "following", categoryLabel: active });
 
   if (!user) {
     return (
@@ -27,9 +26,13 @@ export default function Following() {
     );
   }
 
-  const posts = POSTS.filter(
-    (p) => FOLLOWED.includes(p.authorId) && (active === "All" || p.category === active),
-  );
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <Feed
