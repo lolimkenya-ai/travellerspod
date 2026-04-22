@@ -1,8 +1,16 @@
 import { Feed } from "@/components/feed/Feed";
-import { POSTS } from "@/data/posts";
+import { usePosts } from "@/hooks/usePosts";
+import { Loader2 } from "lucide-react";
 
 export default function Broadcasts() {
-  const posts = POSTS.filter((p) => p.isBroadcast);
+  const { posts, loading } = usePosts({ scope: "broadcasts" });
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
   return (
     <Feed
       posts={posts}

@@ -92,6 +92,16 @@ export const ME: User = {
 
 export const ALL_USERS = [...USERS, ME];
 
-export function getUser(id: string): User {
-  return ALL_USERS.find((u) => u.id === id) ?? ME;
+// Runtime registry for users loaded from the database (posts, profiles…).
+// Lets components like AuthorChip resolve DB authors via getUser() without
+// touching every render path.
+const RUNTIME_USERS = new Map<string, User>();
+
+export function registerUser(u: User) {
+  RUNTIME_USERS.set(u.id, u);
 }
+
+export function getUser(id: string): User {
+  return RUNTIME_USERS.get(id) ?? ALL_USERS.find((u) => u.id === id) ?? ME;
+}
+
