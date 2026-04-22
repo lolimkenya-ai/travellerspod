@@ -96,6 +96,14 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+
+  // Refresh whenever a new post is published anywhere in the app.
+  useEffect(() => {
+    const onChange = () => setVersion((v) => v + 1);
+    window.addEventListener("posts:changed", onChange);
+    return () => window.removeEventListener("posts:changed", onChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,7 +178,7 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
     return () => {
       cancelled = true;
     };
-  }, [scope, authorId, categoryLabel, limit]);
+  }, [scope, authorId, categoryLabel, limit, version]);
 
   return { posts, loading, error };
 }
