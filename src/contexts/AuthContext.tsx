@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {};
     },
     signUpWithEmail: async (email, password, meta) => {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -92,9 +92,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: meta,
         },
       });
-      if (error) return { error: error.message };
+      if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+          // Try to sign them in directly with the password they typed
+          const signin = await supabase.auth.signInWithPassword({ email, password });
+          if (!signin.error) {
+            setShowSignUp(false);
+            toast.success("Welcome back — you already had an account.");
+            return {};
+          }
+          return { error: "That email is already registered. Try signing in instead." };
+        }
+        return { error: error.message };
+      }
+      // If session is null, auto-confirm is off and user must click email link
+      if (!data.session) {
+        return { error: "Check your email to confirm your account, then sign in." };
+      }
       setShowSignUp(false);
-      toast.success("Account created — you’re in.");
+      toast.success("Welcome to travelpod ✈️");
       return {};
     },
     signInWithGoogle: async () => {
