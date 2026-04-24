@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/useCategories";
+import { rateLimit } from "@/lib/rateLimit";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -184,6 +185,9 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
 
     setBusy(true);
     try {
+      // Server-enforced rate limit: max 5 posts per minute
+      const ok = await rateLimit("create_post", 5, 60);
+      if (!ok) { setBusy(false); return; }
       let media_url: string | null = null;
       let poster_url: string | null = null;
       let text_background: string | null = null;
