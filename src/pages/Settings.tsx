@@ -7,15 +7,21 @@ import {
   LogOut,
   ChevronRight,
   BadgeCheck,
+  Bell,
+  Lock,
+  KeyRound,
+  Mail,
+  Trash2,
+  ShieldOff,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useRoles } from "@/hooks/useRoles";
 import { Loader2 } from "lucide-react";
 
 export default function Settings() {
   const navigate = useNavigate();
   const { user, profile, loading, signOut } = useAuth();
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useRoles();
 
   if (loading) {
     return (
@@ -42,7 +48,7 @@ export default function Settings() {
   const isBusiness = profile.account_type === "business";
 
   return (
-    <div className="mx-auto min-h-screen max-w-[480px] bg-background">
+    <div className="mx-auto min-h-screen max-w-[480px] bg-background pb-12">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur-md">
         <button
           onClick={() => navigate(-1)}
@@ -86,9 +92,21 @@ export default function Settings() {
         )}
       </Section>
 
+      <Section title="Privacy & safety">
+        <Row to="/settings/privacy" icon={<Lock className="h-4 w-4" />} label="Privacy" />
+        <Row to="/settings/blocked" icon={<ShieldOff className="h-4 w-4" />} label="Blocked accounts" />
+        <Row to="/settings/notifications" icon={<Bell className="h-4 w-4" />} label="Notifications" />
+      </Section>
+
+      <Section title="Security">
+        <Row to="/settings/password" icon={<KeyRound className="h-4 w-4" />} label="Change password" />
+        <Row to="/settings/email" icon={<Mail className="h-4 w-4" />} label="Change email" />
+        <Row to="/settings/sessions" icon={<ShieldCheck className="h-4 w-4" />} label="Sign out everywhere" />
+      </Section>
+
       {isAdmin && (
         <Section title="Admin">
-          <Row to="/admin" icon={<ShieldCheck className="h-4 w-4" />} label="Verification queue" />
+          <Row to="/access" icon={<ShieldCheck className="h-4 w-4" />} label="travelpod admin" />
         </Section>
       )}
 
@@ -98,11 +116,12 @@ export default function Settings() {
             await signOut();
             navigate("/");
           }}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-destructive hover:bg-accent"
+          className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-accent"
         >
           <LogOut className="h-4 w-4" />
           Sign out
         </button>
+        <Row to="/settings/delete" icon={<Trash2 className="h-4 w-4 text-destructive" />} label="Delete account" destructive />
       </Section>
     </div>
   );
@@ -124,19 +143,21 @@ function Row({
   icon,
   label,
   right,
+  destructive,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   right?: React.ReactNode;
+  destructive?: boolean;
 }) {
   return (
     <Link
       to={to}
-      className="flex items-center gap-3 border-b border-border/50 px-4 py-3 text-sm text-foreground last:border-b-0 hover:bg-accent"
+      className="flex items-center gap-3 border-b border-border/50 px-4 py-3 text-sm last:border-b-0 hover:bg-accent"
     >
       <span className="text-muted-foreground">{icon}</span>
-      <span className="flex-1">{label}</span>
+      <span className={`flex-1 ${destructive ? "text-destructive" : "text-foreground"}`}>{label}</span>
       {right}
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
     </Link>
