@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_secrets: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -26,6 +44,42 @@ export type Database = {
         Update: {
           key?: string
           value?: string
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_email: string | null
+          actor_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          ip_addr: string | null
+          metadata: Json
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          ip_addr?: string | null
+          metadata?: Json
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          ip_addr?: string | null
+          metadata?: Json
         }
         Relationships: []
       }
@@ -164,6 +218,45 @@ export type Database = {
             foreignKeyName: "business_details_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_members: {
+        Row: {
+          added_by: string | null
+          business_id: string
+          created_at: string
+          role: Database["public"]["Enums"]["business_role"]
+          user_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          business_id: string
+          created_at?: string
+          role?: Database["public"]["Enums"]["business_role"]
+          user_id: string
+        }
+        Update: {
+          added_by?: string | null
+          business_id?: string
+          created_at?: string
+          role?: Database["public"]["Enums"]["business_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_members_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -599,6 +692,60 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limits: {
+        Row: {
+          action: string
+          count: number
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          action: string
+          count?: number
+          user_id: string
+          window_start: string
+        }
+        Update: {
+          action?: string
+          count?: number
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      user_blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_blocks_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_blocks_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -617,12 +764,72 @@ export type Database = {
         }
         Relationships: []
       }
+      user_settings: {
+        Row: {
+          comment_policy: string
+          dm_policy: string
+          email_optin: boolean
+          notify_broadcasts: boolean
+          notify_comments: boolean
+          notify_follows: boolean
+          notify_inquiries: boolean
+          notify_likes: boolean
+          notify_reposts: boolean
+          private_account: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_policy?: string
+          dm_policy?: string
+          email_optin?: boolean
+          notify_broadcasts?: boolean
+          notify_comments?: boolean
+          notify_follows?: boolean
+          notify_inquiries?: boolean
+          notify_likes?: boolean
+          notify_reposts?: boolean
+          private_account?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_policy?: string
+          dm_policy?: string
+          email_optin?: boolean
+          notify_broadcasts?: boolean
+          notify_comments?: boolean
+          notify_follows?: boolean
+          notify_inquiries?: boolean
+          notify_likes?: boolean
+          notify_reposts?: boolean
+          private_account?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      check_rate_limit: {
+        Args: { _action: string; _max: number; _window_seconds: number }
+        Returns: boolean
+      }
       claim_first_admin: { Args: never; Returns: boolean }
+      delete_my_account: { Args: never; Returns: undefined }
+      ensure_super_admin: { Args: never; Returns: boolean }
+      gc_rate_limits: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -630,14 +837,37 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_blocked: { Args: { _a: string; _b: string }; Returns: boolean }
+      is_business_member: {
+        Args: {
+          _business: string
+          _min_role?: Database["public"]["Enums"]["business_role"]
+          _user: string
+        }
+        Returns: boolean
+      }
       is_conversation_member: {
         Args: { _conv: string; _user: string }
         Returns: boolean
+      }
+      log_audit: {
+        Args: {
+          _action: string
+          _entity_id?: string
+          _entity_type?: string
+          _metadata?: Json
+        }
+        Returns: undefined
+      }
+      maybe_grant_super_admin: {
+        Args: { _email: string; _user_id: string }
+        Returns: undefined
       }
     }
     Enums: {
       account_type: "personal" | "business" | "organization"
       app_role: "admin" | "user" | "super_admin" | "moderator"
+      business_role: "owner" | "manager" | "editor"
       media_type: "video" | "image" | "text"
       notification_type:
         | "like"
@@ -776,6 +1006,7 @@ export const Constants = {
     Enums: {
       account_type: ["personal", "business", "organization"],
       app_role: ["admin", "user", "super_admin", "moderator"],
+      business_role: ["owner", "manager", "editor"],
       media_type: ["video", "image", "text"],
       notification_type: [
         "like",
