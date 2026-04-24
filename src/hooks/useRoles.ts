@@ -29,7 +29,7 @@ export function useRoles(): Roles {
     (async () => {
       // First, give the server a chance to grant super_admin if this is the
       // configured super-admin email signing in for the first time.
-      await supabase.rpc("ensure_super_admin").catch(() => null);
+      try { await supabase.rpc("ensure_super_admin"); } catch { /* ignore */ }
       const { data } = await supabase
         .from("user_roles")
         .select("role")
