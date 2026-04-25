@@ -87,6 +87,22 @@ function rowToPost(row: PostRow): Post {
     };
   }
 
+  const gallery = (row.extra_media ?? [])
+    .sort((a, b) => a.position - b.position)
+    .map((m) => ({ type: m.media_type, src: m.url, poster: m.poster_url ?? undefined }));
+
+  const quote = row.quote
+    ? {
+        id: row.quote.id,
+        caption: row.quote.caption,
+        authorNametag: row.quote.author?.nametag ?? "user",
+        authorDisplayName: row.quote.author?.display_name ?? "User",
+        authorAvatar: row.quote.author?.avatar_url ?? null,
+        cover: row.quote.poster_url ?? row.quote.media_url ?? null,
+        mediaType: (row.quote.media_type as "image" | "video" | "text") ?? "text",
+      }
+    : null;
+
   return {
     id: row.id,
     authorId: row.author_id,
@@ -100,6 +116,8 @@ function rowToPost(row: PostRow): Post {
     reposts: 0,
     isBroadcast: row.is_broadcast,
     isAd: row.is_ad,
+    gallery,
+    quote,
   };
 }
 
