@@ -2,6 +2,7 @@ import { Heart, MessageCircle, Repeat2, Share2, Bookmark } from "lucide-react";
 import { useState } from "react";
 import { useRequireAuth } from "@/contexts/AuthContext";
 import { useBoards } from "@/contexts/BoardsContext";
+import { usePostLike } from "@/hooks/usePostInteractions";
 import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -17,20 +18,17 @@ interface Props {
 }
 
 export function PostActionBar({ post, onComment, onRepost, onSave, onInquire, showInquire }: Props) {
-  const [liked, setLiked] = useState(false);
+  const { liked, count: likeCount, toggle } = usePostLike(post.id, post.likes);
   const [bursting, setBursting] = useState(false);
   const requireAuth = useRequireAuth();
   const { isPostSaved } = useBoards();
   const saved = isPostSaved(post.id);
 
-  const likeCount = liked ? post.likes + 1 : post.likes;
-
-  const handleLike = () =>
-    requireAuth(() => {
-      setLiked((l) => !l);
-      setBursting(true);
-      window.setTimeout(() => setBursting(false), 360);
-    });
+  const handleLike = () => {
+    setBursting(true);
+    window.setTimeout(() => setBursting(false), 360);
+    toggle();
+  };
 
   const handleShare = () =>
     requireAuth(() => {
