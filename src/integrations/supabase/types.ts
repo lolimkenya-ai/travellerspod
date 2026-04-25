@@ -569,6 +569,44 @@ export type Database = {
           },
         ]
       }
+      post_media: {
+        Row: {
+          created_at: string
+          id: string
+          media_type: string
+          position: number
+          post_id: string
+          poster_url: string | null
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          media_type: string
+          position?: number
+          post_id: string
+          poster_url?: string | null
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          media_type?: string
+          position?: number
+          post_id?: string
+          poster_url?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_media_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           author_id: string
@@ -581,9 +619,11 @@ export type Database = {
           is_broadcast: boolean
           likes_count: number
           location: string | null
+          media_count: number
           media_type: Database["public"]["Enums"]["media_type"]
           media_url: string | null
           poster_url: string | null
+          quote_post_id: string | null
           saves_count: number
           text_background: string | null
           text_foreground: string | null
@@ -600,9 +640,11 @@ export type Database = {
           is_broadcast?: boolean
           likes_count?: number
           location?: string | null
+          media_count?: number
           media_type: Database["public"]["Enums"]["media_type"]
           media_url?: string | null
           poster_url?: string | null
+          quote_post_id?: string | null
           saves_count?: number
           text_background?: string | null
           text_foreground?: string | null
@@ -619,9 +661,11 @@ export type Database = {
           is_broadcast?: boolean
           likes_count?: number
           location?: string | null
+          media_count?: number
           media_type?: Database["public"]["Enums"]["media_type"]
           media_url?: string | null
           poster_url?: string | null
+          quote_post_id?: string | null
           saves_count?: number
           text_background?: string | null
           text_foreground?: string | null
@@ -642,6 +686,13 @@ export type Database = {
             referencedRelation: "categories"
             referencedColumns: ["slug"]
           },
+          {
+            foreignKeyName: "posts_quote_post_id_fkey"
+            columns: ["quote_post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
@@ -650,7 +701,9 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          danger_reason: string | null
           display_name: string
+          flagged_danger: boolean
           followers_count: number
           following_count: number
           id: string
@@ -665,7 +718,9 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          danger_reason?: string | null
           display_name: string
+          flagged_danger?: boolean
           followers_count?: number
           following_count?: number
           id: string
@@ -680,7 +735,9 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          danger_reason?: string | null
           display_name?: string
+          flagged_danger?: boolean
           followers_count?: number
           following_count?: number
           id?: string
@@ -817,6 +874,88 @@ export type Database = {
           },
         ]
       }
+      verification_documents: {
+        Row: {
+          content_type: string | null
+          created_at: string
+          file_url: string
+          flag_reason: string | null
+          id: string
+          label: string
+          profile_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          size_bytes: number | null
+          status: string
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string
+          file_url: string
+          flag_reason?: string | null
+          id?: string
+          label: string
+          profile_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          size_bytes?: number | null
+          status?: string
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string
+          file_url?: string
+          flag_reason?: string | null
+          id?: string
+          label?: string
+          profile_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          size_bytes?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_documents_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verification_messages: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_messages_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -829,6 +968,10 @@ export type Database = {
       claim_first_admin: { Args: never; Returns: boolean }
       delete_my_account: { Args: never; Returns: undefined }
       ensure_super_admin: { Args: never; Returns: boolean }
+      flag_document: {
+        Args: { _doc: string; _flagged: boolean; _reason?: string }
+        Returns: undefined
+      }
       gc_rate_limits: { Args: never; Returns: undefined }
       has_role: {
         Args: {
@@ -861,6 +1004,10 @@ export type Database = {
       }
       maybe_grant_super_admin: {
         Args: { _email: string; _user_id: string }
+        Returns: undefined
+      }
+      set_user_danger: {
+        Args: { _flagged: boolean; _reason?: string; _user: string }
         Returns: undefined
       }
     }
