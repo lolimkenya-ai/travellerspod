@@ -20,6 +20,17 @@ interface PostRow {
   comments_count: number;
   saves_count: number;
   created_at: string;
+  quote_post_id?: string | null;
+  media_count?: number;
+  extra_media?: { url: string; poster_url: string | null; media_type: "image" | "video"; position: number }[];
+  quote?: {
+    id: string;
+    caption: string;
+    media_type: string;
+    media_url: string | null;
+    poster_url: string | null;
+    author: { nametag: string; display_name: string; avatar_url: string | null } | null;
+  } | null;
   profile?: {
     id: string;
     nametag: string;
@@ -76,6 +87,22 @@ function rowToPost(row: PostRow): Post {
     };
   }
 
+  const gallery = (row.extra_media ?? [])
+    .sort((a, b) => a.position - b.position)
+    .map((m) => ({ type: m.media_type, src: m.url, poster: m.poster_url ?? undefined }));
+
+  const quote = row.quote
+    ? {
+        id: row.quote.id,
+        caption: row.quote.caption,
+        authorNametag: row.quote.author?.nametag ?? "user",
+        authorDisplayName: row.quote.author?.display_name ?? "User",
+        authorAvatar: row.quote.author?.avatar_url ?? null,
+        cover: row.quote.poster_url ?? row.quote.media_url ?? null,
+        mediaType: (row.quote.media_type as "image" | "video" | "text") ?? "text",
+      }
+    : null;
+
   return {
     id: row.id,
     authorId: row.author_id,
@@ -89,6 +116,8 @@ function rowToPost(row: PostRow): Post {
     reposts: 0,
     isBroadcast: row.is_broadcast,
     isAd: row.is_ad,
+    gallery,
+    quote,
   };
 }
 
@@ -152,9 +181,11 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
         .from("posts")
         .select(
           `id, author_id, media_type, media_url, poster_url, text_background, text_foreground,
-           caption, location, category_slug, is_broadcast, is_ad,
+           caption, location, category_slug, is_broadcast, is_ad, quote_post_id, media_count,
            likes_count, comments_count, saves_count, created_at,
-           profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, verified, followers_count, following_count, bio )`,
+           profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, verified, followers_count, following_count, bio ),
+           extra_media:post_media ( url, poster_url, media_type, position ),
+           quote:posts!posts_quote_post_id_fkey ( id, caption, media_type, media_url, poster_url, author:profiles!posts_author_id_fkey ( nametag, display_name, avatar_url ) )`,
         )
         .order("created_at", { ascending: false })
         .limit(limit);

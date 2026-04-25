@@ -1,17 +1,27 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Video, Image as ImageIcon, Type, Loader2, X, Megaphone, ChevronLeft } from "lucide-react";
+import { Video, Image as ImageIcon, Type, Loader2, X, Megaphone, ChevronLeft, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/useCategories";
 import { rateLimit } from "@/lib/rateLimit";
+import {
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
+  MAX_IMAGES_PER_POST,
+  captureVideoPoster,
+  uploadToBucket,
+} from "@/lib/uploads";
 import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreated?: () => void;
+  /** Optional id of an existing post to wrap as a quote-repost. */
+  quotePostId?: string | null;
+  quoteSummary?: { author: string; caption: string } | null;
 }
 
 type Kind = "video" | "image" | "text";
@@ -25,19 +35,21 @@ const TEXT_THEMES: { bg: string; fg: string }[] = [
   { bg: "linear-gradient(135deg,#DB2777,#7C2D12)", fg: "#FDF2F8" },
 ];
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
-
-export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
+export function CreateSheet({ open, onOpenChange, onCreated, quotePostId, quoteSummary }: Props) {
   const { user, profile } = useAuth();
   const { categories } = useCategories();
   const isOrg = profile?.account_type === "organization";
+  const isQuoting = !!quotePostId;
 
-  const [step, setStep] = useState<Step>("choose");
-  const [kind, setKind] = useState<Kind>("image");
+  const [step, setStep] = useState<Step>(isQuoting ? "compose" : "choose");
+  const [kind, setKind] = useState<Kind>(isQuoting ? "text" : "image");
 
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  // Multi-image: array of files. Video & text use a single file.
+  const [files, setFiles] = useState<File[]>([]);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+
   const [caption, setCaption] = useState("");
   const [location, setLocation] = useState("");
   const [categorySlug, setCategorySlug] = useState<string>("");
@@ -51,9 +63,10 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
   // Reset state when the sheet closes
   useEffect(() => {
     if (!open) {
-      setStep("choose");
-      setFile(null);
-      setPreview(null);
+      setStep(isQuoting ? "compose" : "choose");
+      setKind(isQuoting ? "text" : "image");
+      setFiles([]);
+      setVideoFile(null);
       setCaption("");
       setLocation("");
       setCategorySlug("");
@@ -62,107 +75,71 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
       setBusy(false);
       setProgress(null);
     }
-  }, [open]);
+  }, [open, isQuoting]);
 
-  // Manage the local preview URL lifecycle
+  // Keep image previews in sync with files.
   useEffect(() => {
-    if (!file) {
-      setPreview(null);
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [files]);
+
+  // Keep video preview in sync.
+  useEffect(() => {
+    if (!videoFile) {
+      setVideoPreview(null);
       return;
     }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    const u = URL.createObjectURL(videoFile);
+    setVideoPreview(u);
+    return () => URL.revokeObjectURL(u);
+  }, [videoFile]);
 
   function pick(k: Kind) {
     setKind(k);
     setStep("compose");
     if (k !== "text") {
-      // Trigger native picker on next tick after the input mounts
       setTimeout(() => fileRef.current?.click(), 50);
     }
   }
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const isVideo = f.type.startsWith("video/");
-    const isImage = f.type.startsWith("image/");
-    if (kind === "video" && !isVideo) {
-      toast.error("Please pick a video file");
-      return;
-    }
-    if (kind === "image" && !isImage) {
-      toast.error("Please pick an image file");
-      return;
-    }
-    const max = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-    if (f.size > max) {
-      toast.error(`File too large — max ${isVideo ? "100 MB" : "10 MB"}`);
-      return;
-    }
-    setFile(f);
-  }
+    const picked = Array.from(e.target.files ?? []);
+    if (!picked.length) return;
+    e.target.value = ""; // allow re-pick same file
 
-  /** Capture a single video poster frame at ~1s and return as a Blob. */
-  async function captureVideoPoster(videoFile: File): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(videoFile);
-      const v = document.createElement("video");
-      v.src = url;
-      v.muted = true;
-      v.playsInline = true;
-      v.preload = "metadata";
-      v.crossOrigin = "anonymous";
-      const cleanup = () => URL.revokeObjectURL(url);
-      v.onloadedmetadata = () => {
-        const target = Math.min(1, v.duration / 4);
-        const onSeeked = () => {
-          const c = document.createElement("canvas");
-          const w = v.videoWidth || 720;
-          const h = v.videoHeight || 1280;
-          // Cap poster size so it stays small
-          const scale = Math.min(720 / w, 1);
-          c.width = Math.round(w * scale);
-          c.height = Math.round(h * scale);
-          const ctx = c.getContext("2d");
-          if (!ctx) {
-            cleanup();
-            resolve(null);
-            return;
-          }
-          ctx.drawImage(v, 0, 0, c.width, c.height);
-          c.toBlob(
-            (b) => {
-              cleanup();
-              resolve(b);
-            },
-            "image/jpeg",
-            0.78,
-          );
-        };
-        v.currentTime = target;
-        v.onseeked = onSeeked;
-      };
-      v.onerror = () => {
-        cleanup();
-        resolve(null);
-      };
+    if (kind === "video") {
+      const f = picked[0];
+      if (!f.type.startsWith("video/")) return toast.error("Please pick a video file");
+      if (f.size > MAX_VIDEO_BYTES) return toast.error("File too large — max 100 MB");
+      setVideoFile(f);
+      return;
+    }
+
+    // Images: append, validate each, cap at MAX_IMAGES_PER_POST.
+    const accepted: File[] = [];
+    for (const f of picked) {
+      if (!f.type.startsWith("image/")) {
+        toast.error(`${f.name}: not an image`);
+        continue;
+      }
+      if (f.size > MAX_IMAGE_BYTES) {
+        toast.error(`${f.name}: max 10 MB`);
+        continue;
+      }
+      accepted.push(f);
+    }
+    setFiles((prev) => {
+      const merged = [...prev, ...accepted].slice(0, MAX_IMAGES_PER_POST);
+      if (prev.length + accepted.length > MAX_IMAGES_PER_POST) {
+        toast.error(`Max ${MAX_IMAGES_PER_POST} images per post`);
+      }
+      return merged;
     });
   }
 
-  async function uploadFile(bucket: "posts", file: Blob, ext: string): Promise<string> {
-    if (!user) throw new Error("Not signed in");
-    const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from(bucket).upload(path, file, {
-      cacheControl: "31536000",
-      upsert: false,
-      contentType: file.type || undefined,
-    });
-    if (error) throw error;
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    return data.publicUrl;
+  function removeImageAt(i: number) {
+    setFiles((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   async function publish() {
@@ -170,12 +147,17 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
       toast.error("Sign in to post");
       return;
     }
-    if (caption.trim().length < 1) {
-      toast.error("Add a caption");
+    if (kind !== "text" && kind === "video" && !videoFile) {
+      toast.error("Pick a video");
       return;
     }
-    if (kind !== "text" && !file) {
-      toast.error(kind === "video" ? "Pick a video" : "Pick an image");
+    if (kind === "image" && files.length === 0) {
+      toast.error("Pick at least one image");
+      return;
+    }
+    // Captions are required unless quoting (the quoted post carries content).
+    if (!isQuoting && caption.trim().length < 1) {
+      toast.error("Add a caption");
       return;
     }
     if (broadcast && !isOrg) {
@@ -185,27 +167,37 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
 
     setBusy(true);
     try {
-      // Server-enforced rate limit: max 5 posts per minute
       const ok = await rateLimit("create_post", 5, 60);
-      if (!ok) { setBusy(false); return; }
+      if (!ok) {
+        setBusy(false);
+        return;
+      }
+
       let media_url: string | null = null;
       let poster_url: string | null = null;
       let text_background: string | null = null;
       let text_foreground: string | null = null;
+      const extraMedia: { url: string; poster_url: string | null; type: "image" | "video" }[] = [];
 
-      if (kind === "image" && file) {
-        setProgress("Uploading image…");
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-        media_url = await uploadFile("posts", file, ext);
-      } else if (kind === "video" && file) {
-        setProgress("Generating poster…");
-        const poster = await captureVideoPoster(file);
-        if (poster) {
-          poster_url = await uploadFile("posts", poster, "jpg");
+      if (kind === "image" && files.length > 0) {
+        setProgress(`Uploading ${files.length} image${files.length > 1 ? "s" : ""}…`);
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+          const url = await uploadToBucket("posts", user.id, f, ext);
+          if (i === 0) {
+            media_url = url;
+          } else {
+            extraMedia.push({ url, poster_url: null, type: "image" });
+          }
         }
+      } else if (kind === "video" && videoFile) {
+        setProgress("Generating poster…");
+        const poster = await captureVideoPoster(videoFile);
+        if (poster) poster_url = await uploadToBucket("posts", user.id, poster, "jpg");
         setProgress("Uploading video…");
-        const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
-        media_url = await uploadFile("posts", file, ext);
+        const ext = (videoFile.name.split(".").pop() || "mp4").toLowerCase();
+        media_url = await uploadToBucket("posts", user.id, videoFile, ext);
       } else if (kind === "text") {
         const t = TEXT_THEMES[theme];
         text_background = t.bg;
@@ -213,21 +205,40 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
       }
 
       setProgress("Publishing…");
-      const { error } = await supabase.from("posts").insert({
-        author_id: user.id,
-        media_type: kind,
-        media_url,
-        poster_url,
-        text_background,
-        text_foreground,
-        caption: caption.trim(),
-        location: location.trim() || null,
-        category_slug: categorySlug || null,
-        is_broadcast: broadcast && isOrg,
-      });
+      const totalMedia = (media_url ? 1 : 0) + extraMedia.length;
+      const { data: inserted, error } = await supabase
+        .from("posts")
+        .insert({
+          author_id: user.id,
+          media_type: kind,
+          media_url,
+          poster_url,
+          text_background,
+          text_foreground,
+          caption: caption.trim(),
+          location: location.trim() || null,
+          category_slug: categorySlug || null,
+          is_broadcast: broadcast && isOrg,
+          quote_post_id: quotePostId ?? null,
+          media_count: totalMedia,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
 
-      toast.success("Posted ✈️");
+      if (extraMedia.length > 0 && inserted) {
+        const rows = extraMedia.map((m, i) => ({
+          post_id: inserted.id,
+          position: i + 1, // position 0 is the primary media_url
+          media_type: m.type,
+          url: m.url,
+          poster_url: m.poster_url,
+        }));
+        const { error: mErr } = await supabase.from("post_media").insert(rows);
+        if (mErr) throw mErr;
+      }
+
+      toast.success(isQuoting ? "Reposted ✈️" : "Posted ✈️");
       window.dispatchEvent(new CustomEvent("posts:changed"));
       onOpenChange(false);
       onCreated?.();
@@ -247,7 +258,7 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
         className="h-[92dvh] rounded-t-2xl border-border bg-card p-0 sm:h-[88dvh]"
       >
         <SheetHeader className="flex-row items-center justify-between border-b border-border px-3 py-3 text-left">
-          {step === "compose" ? (
+          {step === "compose" && !isQuoting ? (
             <button
               onClick={() => !busy && setStep("choose")}
               aria-label="Back"
@@ -260,7 +271,15 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
             <span className="h-9 w-9" />
           )}
           <SheetTitle className="text-base">
-            {step === "choose" ? "Create" : kind === "text" ? "New text card" : kind === "video" ? "New video" : "New image"}
+            {step === "choose"
+              ? "Create"
+              : isQuoting
+              ? "Repost with thoughts"
+              : kind === "text"
+              ? "New text card"
+              : kind === "video"
+              ? "New video"
+              : "New images"}
           </SheetTitle>
           <button
             onClick={() => !busy && onOpenChange(false)}
@@ -275,7 +294,7 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
         {step === "choose" && (
           <div className="grid grid-cols-3 gap-3 p-4">
             <Tile icon={<Video className="h-6 w-6" />} label="Video" onClick={() => pick("video")} />
-            <Tile icon={<ImageIcon className="h-6 w-6" />} label="Image" onClick={() => pick("image")} />
+            <Tile icon={<ImageIcon className="h-6 w-6" />} label="Images" onClick={() => pick("image")} />
             <Tile icon={<Type className="h-6 w-6" />} label="Text card" onClick={() => pick("text")} />
           </div>
         )}
@@ -286,23 +305,90 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
               ref={fileRef}
               type="file"
               accept={kind === "video" ? "video/*" : "image/*"}
+              multiple={kind === "image"}
               onChange={onFileChange}
               className="hidden"
             />
 
             <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
+              {/* Quote header — like the WhatsApp screenshot reference */}
+              {isQuoting && quoteSummary && (
+                <div className="mb-3 overflow-hidden rounded-2xl border-l-4 border-primary bg-muted/60 px-3 py-2">
+                  <p className="text-xs font-semibold text-primary">@{quoteSummary.author}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                    {quoteSummary.caption}
+                  </p>
+                </div>
+              )}
+
+              {/* Picker tabs when quoting (so user can attach media too) */}
+              {isQuoting && (
+                <div className="mb-3 flex gap-2">
+                  {(["text", "image", "video"] as Kind[]).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => {
+                        setKind(k);
+                        if (k !== "text") setTimeout(() => fileRef.current?.click(), 50);
+                      }}
+                      className={cn(
+                        "flex-1 rounded-full border px-3 py-1.5 text-xs font-semibold capitalize",
+                        kind === k
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {k === "text" ? "Just text" : k === "image" ? "Add images" : "Add video"}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Media preview */}
               {kind === "image" && (
-                <div
-                  onClick={() => !busy && fileRef.current?.click()}
-                  className="relative mb-4 flex aspect-[9/14] w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-muted text-muted-foreground hover:bg-accent"
-                >
-                  {preview ? (
-                    <img src={preview} alt="" className="h-full w-full object-cover" />
+                <div className="mb-4">
+                  {files.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      className="flex aspect-[9/14] w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-muted text-muted-foreground hover:bg-accent"
+                    >
+                      <div className="flex flex-col items-center gap-2 text-sm">
+                        <ImageIcon className="h-7 w-7" />
+                        Tap to choose images
+                        <span className="text-xs">Up to {MAX_IMAGES_PER_POST}</span>
+                      </div>
+                    </button>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 text-sm">
-                      <ImageIcon className="h-7 w-7" />
-                      Tap to choose an image
+                    <div className="grid grid-cols-3 gap-2">
+                      {previews.map((src, i) => (
+                        <div key={i} className="relative aspect-square overflow-hidden rounded-lg border border-border bg-muted">
+                          <img src={src} alt="" className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeImageAt(i)}
+                            className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-background/80 text-foreground"
+                            aria-label="Remove image"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                          {i === 0 && (
+                            <span className="absolute bottom-1 left-1 rounded-full bg-foreground/80 px-2 py-0.5 text-[10px] font-semibold text-background">
+                              Cover
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {files.length < MAX_IMAGES_PER_POST && (
+                        <button
+                          type="button"
+                          onClick={() => fileRef.current?.click()}
+                          className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-border bg-muted text-muted-foreground hover:bg-accent"
+                        >
+                          <Plus className="h-5 w-5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -313,8 +399,8 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
                   onClick={() => !busy && fileRef.current?.click()}
                   className="relative mb-4 flex aspect-[9/14] w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-black text-muted-foreground hover:bg-accent/30"
                 >
-                  {preview ? (
-                    <video src={preview} muted playsInline className="h-full w-full object-cover" />
+                  {videoPreview ? (
+                    <video src={videoPreview} muted playsInline className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex flex-col items-center gap-2 text-sm text-foreground/70">
                       <Video className="h-7 w-7" />
@@ -324,7 +410,7 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
                 </div>
               )}
 
-              {kind === "text" && (
+              {kind === "text" && !isQuoting && (
                 <>
                   <div
                     className="mb-3 flex aspect-[9/14] w-full items-center justify-center rounded-xl p-6"
@@ -357,12 +443,12 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
               <textarea
                 value={caption}
                 onChange={(e) => setCaption(e.target.value.slice(0, 2200))}
-                placeholder="Write a caption…"
+                placeholder={isQuoting ? "Add your thoughts… (optional)" : "Write a caption…"}
                 rows={3}
                 className="w-full resize-none rounded-xl border border-border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-                <span>Required</span>
+                <span>{isQuoting ? "Optional" : "Required"}</span>
                 <span>{caption.length}/2200</span>
               </div>
 
@@ -373,7 +459,6 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
                 className="mt-3 w-full rounded-full border border-border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
 
-              {/* Category */}
               {categories.length > 0 && (
                 <div className="mt-3">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -425,7 +510,7 @@ export function CreateSheet({ open, onOpenChange, onCreated }: Props) {
                 className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
               >
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-                {busy ? progress ?? "Publishing…" : "Publish"}
+                {busy ? progress ?? "Publishing…" : isQuoting ? "Repost" : "Publish"}
               </button>
             </div>
           </div>
