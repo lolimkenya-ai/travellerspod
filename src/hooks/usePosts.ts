@@ -181,9 +181,11 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
         .from("posts")
         .select(
           `id, author_id, media_type, media_url, poster_url, text_background, text_foreground,
-           caption, location, category_slug, is_broadcast, is_ad,
+           caption, location, category_slug, is_broadcast, is_ad, quote_post_id, media_count,
            likes_count, comments_count, saves_count, created_at,
-           profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, verified, followers_count, following_count, bio )`,
+           profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, verified, followers_count, following_count, bio ),
+           extra_media:post_media ( url, poster_url, media_type, position ),
+           quote:posts!posts_quote_post_id_fkey ( id, caption, media_type, media_url, poster_url, author:profiles!posts_author_id_fkey ( nametag, display_name, avatar_url ) )`,
         )
         .order("created_at", { ascending: false })
         .limit(limit);
