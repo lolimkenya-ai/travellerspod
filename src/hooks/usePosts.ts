@@ -20,6 +20,17 @@ interface PostRow {
   comments_count: number;
   saves_count: number;
   created_at: string;
+  quote_post_id?: string | null;
+  media_count?: number;
+  extra_media?: { url: string; poster_url: string | null; media_type: "image" | "video"; position: number }[];
+  quote?: {
+    id: string;
+    caption: string;
+    media_type: string;
+    media_url: string | null;
+    poster_url: string | null;
+    author: { nametag: string; display_name: string; avatar_url: string | null } | null;
+  } | null;
   profile?: {
     id: string;
     nametag: string;
