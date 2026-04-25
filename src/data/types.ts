@@ -24,13 +24,25 @@ export interface Post {
   media: PostMedia;
   caption: string;
   location: string;
-  category: string; // matches a chip
+  category: string;
   createdAt: string;
   likes: number;
   comments: number;
   reposts: number;
-  isBroadcast?: boolean; // organization boosted
+  isBroadcast?: boolean;
   isAd?: boolean;
+  /** Extra images/videos beyond the cover `media`. */
+  gallery?: { type: "image" | "video"; src: string; poster?: string }[];
+  /** Snapshot of a quoted/reposted post. */
+  quote?: {
+    id: string;
+    caption: string;
+    authorNametag: string;
+    authorDisplayName: string;
+    authorAvatar: string | null;
+    cover: string | null;
+    mediaType: "image" | "video" | "text";
+  } | null;
 }
 
 export interface Comment {
