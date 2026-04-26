@@ -23,14 +23,6 @@ interface PostRow {
   quote_post_id?: string | null;
   media_count?: number;
   extra_media?: { url: string; poster_url: string | null; media_type: "image" | "video"; position: number }[];
-  quote?: {
-    id: string;
-    caption: string;
-    media_type: string;
-    media_url: string | null;
-    poster_url: string | null;
-    author: { nametag: string; display_name: string; avatar_url: string | null } | null;
-  } | null;
   profile?: {
     id: string;
     nametag: string;
@@ -44,6 +36,19 @@ interface PostRow {
   } | null;
 }
 
+interface QuoteRow {
+  id: string;
+  caption: string;
+  media_type: "image" | "video" | "text";
+  media_url: string | null;
+  poster_url: string | null;
+  author: {
+    nametag: string;
+    display_name: string;
+    avatar_url: string | null;
+  } | null;
+}
+
 export interface UsePostsOptions {
   scope?: "discover" | "following" | "broadcasts" | "author";
   authorId?: string;
@@ -51,7 +56,7 @@ export interface UsePostsOptions {
   limit?: number;
 }
 
-function rowToPost(row: PostRow): Post {
+function rowToPost(row: PostRow, quotesById: Map<string, QuoteRow>): Post {
   // Hydrate the in-memory user store so AuthorChip / mocks resolve the author.
   if (row.profile) {
     registerUser({
@@ -91,15 +96,16 @@ function rowToPost(row: PostRow): Post {
     .sort((a, b) => a.position - b.position)
     .map((m) => ({ type: m.media_type, src: m.url, poster: m.poster_url ?? undefined }));
 
-  const quote = row.quote
+  const q = row.quote_post_id ? quotesById.get(row.quote_post_id) : undefined;
+  const quote = q
     ? {
-        id: row.quote.id,
-        caption: row.quote.caption,
-        authorNametag: row.quote.author?.nametag ?? "user",
-        authorDisplayName: row.quote.author?.display_name ?? "User",
-        authorAvatar: row.quote.author?.avatar_url ?? null,
-        cover: row.quote.poster_url ?? row.quote.media_url ?? null,
-        mediaType: (row.quote.media_type as "image" | "video" | "text") ?? "text",
+        id: q.id,
+        caption: q.caption,
+        authorNametag: q.author?.nametag ?? "user",
+        authorDisplayName: q.author?.display_name ?? "User",
+        authorAvatar: q.author?.avatar_url ?? null,
+        cover: q.poster_url ?? q.media_url ?? null,
+        mediaType: (q.media_type as "image" | "video" | "text") ?? "text",
       }
     : null;
 
@@ -177,6 +183,8 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
         slug = cat?.slug ?? null;
       }
 
+      // Avoid the self-referencing embed (PostgREST 400) by selecting quote_post_id
+      // and resolving quoted posts in a follow-up query.
       let q = supabase
         .from("posts")
         .select(
@@ -184,8 +192,7 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
            caption, location, category_slug, is_broadcast, is_ad, quote_post_id, media_count,
            likes_count, comments_count, saves_count, created_at,
            profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, verified, followers_count, following_count, bio ),
-           extra_media:post_media ( url, poster_url, media_type, position ),
-           quote:posts!posts_quote_post_id_fkey ( id, caption, media_type, media_url, poster_url, author:profiles!posts_author_id_fkey ( nametag, display_name, avatar_url ) )`,
+           extra_media:post_media ( url, poster_url, media_type, position )`,
         )
         .order("created_at", { ascending: false })
         .limit(limit);
@@ -200,9 +207,32 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
       if (err) {
         setError(err.message);
         setPosts([]);
-      } else {
-        setPosts((data as unknown as PostRow[]).map(rowToPost));
+        setLoading(false);
+        return;
       }
+
+      const rows = (data as unknown as PostRow[]) ?? [];
+
+      // Fetch quoted posts in a separate query (no self-embed).
+      const quoteIds = Array.from(
+        new Set(rows.map((r) => r.quote_post_id).filter((x): x is string => !!x)),
+      );
+      const quotesById = new Map<string, QuoteRow>();
+      if (quoteIds.length > 0) {
+        const { data: qd } = await supabase
+          .from("posts")
+          .select(
+            `id, caption, media_type, media_url, poster_url,
+             author:profiles!posts_author_id_fkey ( nametag, display_name, avatar_url )`,
+          )
+          .in("id", quoteIds);
+        for (const row of (qd as unknown as QuoteRow[]) ?? []) {
+          quotesById.set(row.id, row);
+        }
+      }
+
+      if (cancelled) return;
+      setPosts(rows.map((r) => rowToPost(r, quotesById)));
       setLoading(false);
     })();
 
