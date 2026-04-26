@@ -67,7 +67,7 @@ export function SignUpSheet() {
     <Sheet open={showSignUp} onOpenChange={(o) => { if (!o) { closeSignUp(); reset(); } }}>
       <SheetContent side="bottom" className="h-auto rounded-t-2xl border-border bg-card p-0">
         <SheetHeader className="border-b border-border px-4 py-3 text-left">
-          <SheetTitle>{mode === "signin" ? "Sign in to travelpod" : "Join travelpod"}</SheetTitle>
+          <SheetTitle>{mode === "signin" ? "Sign in to Safiripod" : "Join Safiripod"}</SheetTitle>
         </SheetHeader>
 
         <div className="space-y-4 p-5">

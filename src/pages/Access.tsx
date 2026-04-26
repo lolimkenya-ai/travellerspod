@@ -91,7 +91,7 @@ export default function Access() {
         <Empty
           icon={<KeyRound className="h-8 w-8 text-muted-foreground" />}
           title="Sign in required"
-          subtitle="Sign in with the super-admin account to manage travelpod."
+          subtitle="Sign in with the super-admin account to manage Safiripod."
         />
       </Frame>
     );
@@ -103,14 +103,14 @@ export default function Access() {
         <Empty
           icon={<KeyRound className="h-8 w-8 text-muted-foreground" />}
           title="Access denied"
-          subtitle="This area is for travelpod admins only."
+          subtitle="This area is for Safiripod admins only."
         />
       </Frame>
     );
   }
 
   return (
-    <Frame back={() => navigate("/")} title="travelpod admin">
+    <Frame back={() => navigate("/")} title="Safiripod admin">
       <div className="sticky top-[57px] z-10 -mt-px overflow-x-auto border-b border-border bg-background/95 backdrop-blur-md">
         <div className="flex min-w-max gap-1 px-3 py-2">
           {([

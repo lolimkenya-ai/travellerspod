@@ -46,9 +46,9 @@ export function AppShell() {
             <button
               onClick={() => navigate("/")}
               className="text-2xl font-extrabold tracking-tight text-foreground"
-              aria-label="travelpod home"
+              aria-label="Safiripod home"
             >
-              travelpod
+              Safiripod
             </button>
             <nav className="flex items-center gap-1" aria-label="Primary actions">
               <IconButton label="Create" onClick={() => (user ? setCreateOpen(true) : promptSignUp())} ring>

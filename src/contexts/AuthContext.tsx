@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: "Check your email to confirm your account, then sign in." };
       }
       setShowSignUp(false);
-      toast.success("Welcome to travelpod ✈️");
+      toast.success("Welcome to Safiripod ✈️");
       return {};
     },
     signInWithGoogle: async () => {

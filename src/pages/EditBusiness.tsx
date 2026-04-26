@@ -296,7 +296,7 @@ function VerificationCard({
         <BadgeCheck className="h-5 w-5 fill-verified text-verified-foreground" />
         <div className="flex-1">
           <p className="text-sm font-semibold text-foreground">Verified business</p>
-          <p className="text-xs text-muted-foreground">Your badge is live across travelpod.</p>
+          <p className="text-xs text-muted-foreground">Your badge is live across Safiripod.</p>
         </div>
       </div>
     );

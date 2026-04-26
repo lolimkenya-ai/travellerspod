@@ -84,7 +84,7 @@ export const ME: User = {
   nametag: "you",
   displayName: "You",
   avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&h=200&fit=crop",
-  bio: "Welcome to travelpod",
+  bio: "Welcome to Safiripod",
   accountType: "normal",
   followers: 0,
   following: 0,
