@@ -78,6 +78,7 @@ const App = () => (
                   <Route path="/settings/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
                   <Route path="/settings/delete" element={<ProtectedRoute><DeleteAccount /></ProtectedRoute>} />
                   <Route path="/access" element={<ProtectedRoute require="admin"><Access /></ProtectedRoute>} />
+                  <Route path="/access/compose" element={<ProtectedRoute require="admin"><AccessCompose /></ProtectedRoute>} />
                   <Route path="/admin" element={<Navigate to="/access" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
