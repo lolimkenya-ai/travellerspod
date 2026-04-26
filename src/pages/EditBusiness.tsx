@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Loader2, Send, BadgeCheck, Clock, ShieldOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, Loader2, Send, BadgeCheck, Clock, ShieldOff, Upload, FileText, Trash2, Flag } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/useCategories";
