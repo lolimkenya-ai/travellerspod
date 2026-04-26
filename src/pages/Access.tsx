@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -6,11 +6,14 @@ import {
   ShieldOff,
   Loader2,
   KeyRound,
-  Users,
   ScrollText,
   FileText,
   Search as SearchIcon,
   Trash2,
+  Eye,
+  Flag,
+  AlertTriangle,
+  PenSquare,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +31,8 @@ interface PendingProfile {
   avatar_url: string | null;
   verification_status: "unverified" | "pending" | "verified";
   account_type: string;
+  flagged_danger?: boolean;
+  danger_reason?: string | null;
   business: {
     category_slug: string | null;
     associations: string | null;
@@ -47,6 +52,7 @@ interface UserRow {
   avatar_url: string | null;
   account_type: string;
   verified: boolean;
+  flagged_danger: boolean;
   followers_count: number;
   roles: string[];
 }
@@ -71,6 +77,18 @@ interface AuditRow {
   created_at: string;
 }
 
+interface VDoc {
+  id: string;
+  label: string;
+  file_url: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  status: string;
+  flag_reason: string | null;
+  review_message: string | null;
+  created_at: string;
+}
+
 export default function Access() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -91,7 +109,7 @@ export default function Access() {
         <Empty
           icon={<KeyRound className="h-8 w-8 text-muted-foreground" />}
           title="Sign in required"
-          subtitle="Sign in with the super-admin account to manage travelpod."
+          subtitle="Sign in with the super-admin account to manage Safiripod."
         />
       </Frame>
     );
@@ -103,70 +121,82 @@ export default function Access() {
         <Empty
           icon={<KeyRound className="h-8 w-8 text-muted-foreground" />}
           title="Access denied"
-          subtitle="This area is for travelpod admins only."
+          subtitle="This area is for Safiripod admins only."
         />
       </Frame>
     );
   }
 
   return (
-    <Frame back={() => navigate("/")} title="travelpod admin">
+    <Frame back={() => navigate("/")} title="Safiripod admin">
       <div className="sticky top-[57px] z-10 -mt-px overflow-x-auto border-b border-border bg-background/95 backdrop-blur-md">
-        <div className="flex min-w-max gap-1 px-3 py-2">
-          {([
-            ["queue", "Queue"],
-            ["verified", "Verified"],
-            ["users", "Users"],
-            ["posts", "Posts"],
-            ...(isSuperAdmin ? ([["audit", "Audit log"]] as const) : []),
-          ] as const).map(([k, label]) => (
-            <button
-              key={k}
-              onClick={() => setTab(k as Tab)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-                tab === k
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+        <div className="mx-auto flex min-w-max max-w-6xl items-center justify-between gap-2 px-3 py-2">
+          <div className="flex gap-1">
+            {([
+              ["queue", "Queue"],
+              ["verified", "Verified"],
+              ["users", "Users"],
+              ["posts", "Posts"],
+              ...(isSuperAdmin ? ([["audit", "Audit log"]] as const) : []),
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setTab(k as Tab)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                  tab === k
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {isSuperAdmin && (
+            <Link
+              to="/access/compose"
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              {label}
-            </button>
-          ))}
+              <PenSquare className="h-3.5 w-3.5" /> Post as Safiripod
+            </Link>
+          )}
         </div>
       </div>
 
-      {tab === "queue" && <QueueTab />}
-      {tab === "verified" && <VerifiedTab />}
-      {tab === "users" && <UsersTab isSuperAdmin={isSuperAdmin} />}
-      {tab === "posts" && <PostsTab />}
-      {tab === "audit" && isSuperAdmin && <AuditTab />}
+      <div className="mx-auto max-w-6xl">
+        {tab === "queue" && <QueueTab />}
+        {tab === "verified" && <VerifiedTab />}
+        {tab === "users" && <UsersTab isSuperAdmin={isSuperAdmin} />}
+        {tab === "posts" && <PostsTab />}
+        {tab === "audit" && isSuperAdmin && <AuditTab />}
+      </div>
     </Frame>
   );
 }
 
+/* ------------------------- Queue ------------------------- */
+
 function QueueTab() {
   const [pending, setPending] = useState<PendingProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, display_name, nametag, avatar_url, verification_status, account_type")
+      .select("id, display_name, nametag, avatar_url, verification_status, account_type, flagged_danger, danger_reason")
       .eq("verification_status", "pending")
       .order("updated_at", { ascending: false });
     const ids = (profiles ?? []).map((p) => p.id);
     const map = new Map<string, PendingProfile["business"]>();
     if (ids.length) {
-      const { data: biz } = await supabase
-        .from("business_details")
-        .select("*")
-        .in("profile_id", ids);
+      const { data: biz } = await supabase.from("business_details").select("*").in("profile_id", ids);
       biz?.forEach((b) => map.set(b.profile_id, b as PendingProfile["business"]));
     }
     setPending(
-      (profiles ?? []).map((p) => ({ ...(p as PendingProfile), business: map.get(p.id) ?? null })),
+      (profiles ?? []).map((p: any) => ({ ...(p as PendingProfile), business: map.get(p.id) ?? null })),
     );
     setLoading(false);
   }
@@ -175,41 +205,229 @@ function QueueTab() {
     refresh();
   }, []);
 
-  async function approve(id: string) {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ verification_status: "verified" })
-      .eq("id", id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Verified");
-      refresh();
-    }
-  }
-  async function reject(id: string) {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ verification_status: "unverified" })
-      .eq("id", id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Rejected");
-      refresh();
-    }
-  }
-
   if (loading) return <Spinner />;
   if (pending.length === 0)
-    return <Empty icon={<ShieldCheck className="h-8 w-8 text-muted-foreground" />} title="Queue empty" subtitle="No pending verification requests." />;
+    return (
+      <Empty
+        icon={<ShieldCheck className="h-8 w-8 text-muted-foreground" />}
+        title="Queue empty"
+        subtitle="No pending verification requests."
+      />
+    );
 
   return (
-    <div className="space-y-3 px-4 py-4">
+    <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
       {pending.map((p) => (
-        <BusinessCard key={p.id} profile={p} onApprove={() => approve(p.id)} onReject={() => reject(p.id)} />
+        <ReviewCard
+          key={p.id}
+          profile={p}
+          expanded={openId === p.id}
+          onToggle={() => setOpenId((prev) => (prev === p.id ? null : p.id))}
+          onChanged={refresh}
+        />
       ))}
     </div>
   );
 }
+
+function ReviewCard({
+  profile,
+  expanded,
+  onToggle,
+  onChanged,
+}: {
+  profile: PendingProfile;
+  expanded: boolean;
+  onToggle: () => void;
+  onChanged: () => void;
+}) {
+  const b = profile.business;
+  const [docs, setDocs] = useState<VDoc[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (!expanded) return;
+    setDocsLoading(true);
+    supabase
+      .from("verification_documents")
+      .select("*")
+      .eq("profile_id", profile.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setDocs((data ?? []) as VDoc[]);
+        setDocsLoading(false);
+      });
+  }, [expanded, profile.id]);
+
+  async function decide(decision: "verified" | "unverified") {
+    if (decision === "unverified" && !reason.trim()) {
+      toast.error("Please add a reason — the user will see it.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.rpc("decide_verification", {
+      _profile: profile.id,
+      _decision: decision,
+      _reason: decision === "unverified" ? reason.trim() : null,
+    });
+    setBusy(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(decision === "verified" ? "Verified" : "Rejected with reason");
+      onChanged();
+    }
+  }
+
+  async function flagDoc(d: VDoc) {
+    const r = window.prompt("Why is this document being flagged?", d.flag_reason ?? "");
+    if (r === null) return;
+    const { error } = await supabase.rpc("flag_document", {
+      _doc: d.id,
+      _flagged: true,
+      _reason: r.trim() || null,
+    });
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Flagged");
+      setDocs((arr) => arr.map((x) => (x.id === d.id ? { ...x, status: "flagged", flag_reason: r.trim() || null } : x)));
+    }
+  }
+
+  async function setDanger(on: boolean) {
+    let r: string | null = null;
+    if (on) {
+      r = window.prompt("Reason this account is dangerous? (shown to admins, used for protection)") ?? null;
+      if (!r || !r.trim()) return;
+    }
+    const { error } = await supabase.rpc("set_user_danger", {
+      _user: profile.id,
+      _flagged: on,
+      _reason: r,
+    });
+    if (error) toast.error(error.message);
+    else {
+      toast.success(on ? "Marked as danger account" : "Cleared danger flag");
+      onChanged();
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <button onClick={onToggle} className="flex w-full items-center gap-3 text-left">
+        <img
+          src={profile.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.display_name)}`}
+          alt=""
+          className="h-12 w-12 rounded-full object-cover ring-1 ring-border"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
+            {profile.display_name}
+            {profile.flagged_danger && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">@{profile.nametag} · {profile.account_type}</p>
+        </div>
+        <Eye className="h-4 w-4 text-muted-foreground" />
+      </button>
+
+      {b && (
+        <div className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
+          {b.category_slug && <Detail k="Category" v={b.category_slug} />}
+          {b.associations && <Detail k="Associations" v={b.associations} />}
+          {b.registration_number && <Detail k="Reg №" v={b.registration_number} />}
+          {(b.address || b.country) && <Detail k="Location" v={[b.address, b.country].filter(Boolean).join(", ")} />}
+          {b.contact_email && <Detail k="Email" v={b.contact_email} />}
+          {b.contact_phone && <Detail k="Phone" v={b.contact_phone} />}
+          {b.website && <Detail k="Website" v={b.website} />}
+        </div>
+      )}
+
+      {expanded && (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Documents</p>
+          {docsLoading ? (
+            <Spinner />
+          ) : docs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {docs.map((d) => (
+                <li key={d.id} className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-2 text-xs">
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-foreground">{d.label}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {d.content_type ?? "file"} · {d.status}
+                      {d.flag_reason && ` · ${d.flag_reason}`}
+                    </p>
+                  </div>
+                  <a
+                    href={d.file_url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="rounded-full border border-border px-2 py-1 text-[11px] text-foreground hover:bg-accent"
+                  >
+                    Open
+                  </a>
+                  <button
+                    onClick={() => flagDoc(d)}
+                    className="rounded-full bg-destructive/10 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/20"
+                    aria-label="Flag document"
+                  >
+                    <Flag className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="Reason if rejecting (shown to user in their verification thread)…"
+            className="mt-3 w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              disabled={busy}
+              onClick={() => decide("verified")}
+              className="inline-flex items-center justify-center gap-1 rounded-full bg-verified/20 py-2 text-xs font-semibold text-verified-foreground hover:bg-verified/30 disabled:opacity-50"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" /> Approve
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => decide("unverified")}
+              className="inline-flex items-center justify-center gap-1 rounded-full bg-destructive/15 py-2 text-xs font-semibold text-destructive hover:bg-destructive/25 disabled:opacity-50"
+            >
+              <ShieldOff className="h-3.5 w-3.5" /> Reject
+            </button>
+          </div>
+
+          <div className="mt-2 grid grid-cols-1 gap-2">
+            <button
+              onClick={() => setDanger(!profile.flagged_danger)}
+              className={cn(
+                "inline-flex items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-semibold",
+                profile.flagged_danger
+                  ? "bg-muted text-foreground hover:bg-accent"
+                  : "bg-destructive/10 text-destructive hover:bg-destructive/20",
+              )}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {profile.flagged_danger ? "Clear danger flag" : "Mark as danger account"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------- Verified ------------------------- */
 
 function VerifiedTab() {
   const [list, setList] = useState<PendingProfile[]>([]);
@@ -219,7 +437,7 @@ function VerifiedTab() {
     setLoading(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, display_name, nametag, avatar_url, verification_status, account_type")
+      .select("id, display_name, nametag, avatar_url, verification_status, account_type, flagged_danger, danger_reason")
       .eq("verification_status", "verified")
       .order("updated_at", { ascending: false })
       .limit(200);
@@ -231,10 +449,13 @@ function VerifiedTab() {
   }, []);
 
   async function revoke(id: string) {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ verification_status: "unverified" })
-      .eq("id", id);
+    const reason = window.prompt("Reason for revoking verification (sent to user)") ?? "";
+    if (!reason.trim()) return;
+    const { error } = await supabase.rpc("decide_verification", {
+      _profile: id,
+      _decision: "unverified",
+      _reason: reason.trim(),
+    });
     if (error) toast.error(error.message);
     else {
       toast.success("Revoked");
@@ -247,13 +468,36 @@ function VerifiedTab() {
     return <Empty icon={<BadgeCheck className="h-8 w-8 text-muted-foreground" />} title="No verified accounts yet" subtitle="" />;
 
   return (
-    <div className="space-y-3 px-4 py-4">
+    <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
       {list.map((p) => (
-        <BusinessCard key={p.id} profile={p} verified onRevoke={() => revoke(p.id)} />
+        <div key={p.id} className="rounded-2xl border border-border bg-card p-3">
+          <div className="flex items-center gap-3">
+            <img
+              src={p.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(p.display_name)}`}
+              alt=""
+              className="h-12 w-12 rounded-full object-cover ring-1 ring-border"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
+                {p.display_name}
+                <BadgeCheck className="h-4 w-4 fill-verified text-verified-foreground" />
+              </p>
+              <p className="text-xs text-muted-foreground">@{p.nametag}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => revoke(p.id)}
+            className="mt-3 flex w-full items-center justify-center gap-1 rounded-full bg-muted py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
+          >
+            <ShieldOff className="h-3 w-3" /> Revoke verification
+          </button>
+        </div>
       ))}
     </div>
   );
 }
+
+/* ------------------------- Users ------------------------- */
 
 function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [q, setQ] = useState("");
@@ -264,7 +508,7 @@ function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     setLoading(true);
     let query = supabase
       .from("profiles")
-      .select("id, display_name, nametag, avatar_url, account_type, verified, followers_count")
+      .select("id, display_name, nametag, avatar_url, account_type, verified, flagged_danger, followers_count")
       .order("followers_count", { ascending: false })
       .limit(60);
     if (q.trim()) {
@@ -273,7 +517,7 @@ function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     }
     const { data: profiles } = await query;
     const ids = (profiles ?? []).map((p) => p.id);
-    let roleMap = new Map<string, string[]>();
+    const roleMap = new Map<string, string[]>();
     if (ids.length) {
       const { data: roles } = await supabase.from("user_roles").select("user_id, role").in("user_id", ids);
       roles?.forEach((r) => {
@@ -283,7 +527,7 @@ function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       });
     }
     setUsers(
-      (profiles ?? []).map((p) => ({ ...(p as Omit<UserRow, "roles">), roles: roleMap.get(p.id) ?? [] })),
+      (profiles ?? []).map((p: any) => ({ ...(p as Omit<UserRow, "roles">), roles: roleMap.get(p.id) ?? [] })),
     );
     setLoading(false);
   }
@@ -305,6 +549,22 @@ function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     refresh();
   }
 
+  async function toggleDanger(u: UserRow) {
+    let reason: string | null = null;
+    if (!u.flagged_danger) {
+      reason = window.prompt("Reason for flagging this account as dangerous?") ?? null;
+      if (!reason || !reason.trim()) return;
+    }
+    const { error } = await supabase.rpc("set_user_danger", {
+      _user: u.id,
+      _flagged: !u.flagged_danger,
+      _reason: reason,
+    });
+    if (error) return toast.error(error.message);
+    toast.success(u.flagged_danger ? "Cleared" : "Flagged");
+    refresh();
+  }
+
   return (
     <div className="px-4 py-4">
       <div className="relative mb-3">
@@ -319,7 +579,7 @@ function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       {loading ? (
         <Spinner />
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2">
           {users.map((u) => (
             <div key={u.id} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
               <img
@@ -331,6 +591,7 @@ function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
                   {u.display_name}
                   {u.verified && <BadgeCheck className="h-3.5 w-3.5 fill-verified text-verified-foreground" />}
+                  {u.flagged_danger && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   @{u.nametag} · {u.account_type} · {u.followers_count} followers
@@ -345,12 +606,25 @@ function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                   </div>
                 )}
               </div>
-              {isSuperAdmin && (
-                <div className="flex flex-col gap-1">
-                  <RoleToggle on={u.roles.includes("admin")} label="Admin" onChange={(v) => setRole(u.id, "admin", v)} />
-                  <RoleToggle on={u.roles.includes("moderator")} label="Mod" onChange={(v) => setRole(u.id, "moderator", v)} />
-                </div>
-              )}
+              <div className="flex flex-col gap-1">
+                {isSuperAdmin && (
+                  <>
+                    <RoleToggle on={u.roles.includes("admin")} label="Admin" onChange={(v) => setRole(u.id, "admin", v)} />
+                    <RoleToggle on={u.roles.includes("moderator")} label="Mod" onChange={(v) => setRole(u.id, "moderator", v)} />
+                  </>
+                )}
+                <button
+                  onClick={() => toggleDanger(u)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                    u.flagged_danger
+                      ? "border-border text-foreground hover:bg-accent"
+                      : "border-destructive/40 text-destructive hover:bg-destructive/10",
+                  )}
+                >
+                  {u.flagged_danger ? "Unflag" : "Flag"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -372,6 +646,8 @@ function RoleToggle({ on, label, onChange }: { on: boolean; label: string; onCha
     </button>
   );
 }
+
+/* ------------------------- Posts ------------------------- */
 
 function PostsTab() {
   const [q, setQ] = useState("");
@@ -429,7 +705,7 @@ function PostsTab() {
       {loading ? (
         <Spinner />
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
           {posts.map((p) => (
             <div key={p.id} className="rounded-2xl border border-border bg-card p-3">
               <div className="flex items-start justify-between gap-2">
@@ -456,6 +732,8 @@ function PostsTab() {
   );
 }
 
+/* ------------------------- Audit ------------------------- */
+
 function AuditTab() {
   const [logs, setLogs] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -463,11 +741,7 @@ function AuditTab() {
 
   async function refresh() {
     setLoading(true);
-    let q = supabase
-      .from("audit_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
+    let q = supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200);
     if (actionFilter) q = q.eq("action", actionFilter);
     const { data } = await q;
     setLogs((data ?? []) as AuditRow[]);
@@ -485,7 +759,7 @@ function AuditTab() {
         <button
           onClick={() => setActionFilter("")}
           className={cn(
-            "rounded-full border px-3 py-1 text-xs font-semibold",
+            "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
             !actionFilter ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground",
           )}
         >
@@ -496,7 +770,7 @@ function AuditTab() {
             key={a}
             onClick={() => setActionFilter(a)}
             className={cn(
-              "rounded-full border px-3 py-1 text-xs font-semibold",
+              "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
               actionFilter === a ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground",
             )}
           >
@@ -509,7 +783,7 @@ function AuditTab() {
       ) : logs.length === 0 ? (
         <Empty icon={<ScrollText className="h-8 w-8 text-muted-foreground" />} title="No log entries" subtitle="" />
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2">
           {logs.map((l) => (
             <div key={l.id} className="rounded-xl border border-border bg-card p-3 text-xs">
               <div className="flex items-center justify-between gap-2">
@@ -533,76 +807,7 @@ function AuditTab() {
   );
 }
 
-function BusinessCard({
-  profile,
-  onApprove,
-  onReject,
-  onRevoke,
-  verified,
-}: {
-  profile: PendingProfile;
-  onApprove?: () => void;
-  onReject?: () => void;
-  onRevoke?: () => void;
-  verified?: boolean;
-}) {
-  const b = profile.business;
-  return (
-    <div className="rounded-2xl border border-border bg-card p-3">
-      <div className="flex items-center gap-3">
-        <img
-          src={profile.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.display_name)}`}
-          alt=""
-          className="h-12 w-12 rounded-full object-cover ring-1 ring-border"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
-            {profile.display_name}
-            {verified && <BadgeCheck className="h-4 w-4 fill-verified text-verified-foreground" />}
-          </p>
-          <p className="text-xs text-muted-foreground">@{profile.nametag} · {profile.account_type}</p>
-        </div>
-      </div>
-      {b && (
-        <div className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
-          {b.category_slug && <Detail k="Category" v={b.category_slug} />}
-          {b.associations && <Detail k="Associations" v={b.associations} />}
-          {b.registration_number && <Detail k="Reg №" v={b.registration_number} />}
-          {(b.address || b.country) && <Detail k="Location" v={[b.address, b.country].filter(Boolean).join(", ")} />}
-          {b.contact_email && <Detail k="Email" v={b.contact_email} />}
-          {b.contact_phone && <Detail k="Phone" v={b.contact_phone} />}
-          {b.website && <Detail k="Website" v={b.website} />}
-        </div>
-      )}
-      <div className="mt-3 flex gap-2">
-        {onApprove && (
-          <button
-            onClick={onApprove}
-            className="flex flex-1 items-center justify-center gap-1 rounded-full bg-verified/20 py-1.5 text-xs font-semibold text-verified-foreground hover:bg-verified/30"
-          >
-            <ShieldCheck className="h-3 w-3" /> Approve
-          </button>
-        )}
-        {onReject && (
-          <button
-            onClick={onReject}
-            className="flex flex-1 items-center justify-center gap-1 rounded-full bg-destructive/15 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/25"
-          >
-            <ShieldOff className="h-3 w-3" /> Reject
-          </button>
-        )}
-        {onRevoke && (
-          <button
-            onClick={onRevoke}
-            className="flex flex-1 items-center justify-center gap-1 rounded-full bg-muted py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
-          >
-            <ShieldOff className="h-3 w-3" /> Revoke
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+/* ------------------------- Layout helpers ------------------------- */
 
 function Detail({ k, v }: { k: string; v: string }) {
   return (
@@ -614,12 +819,14 @@ function Detail({ k, v }: { k: string; v: string }) {
 
 function Frame({ back, title, children }: { back: () => void; title: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto min-h-screen max-w-[480px] bg-background">
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur-md">
-        <button onClick={back} aria-label="Back" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="text-base font-semibold text-foreground">{title}</h1>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-3">
+          <button onClick={back} aria-label="Back" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-base font-semibold text-foreground">{title}</h1>
+        </div>
       </header>
       {children}
     </div>

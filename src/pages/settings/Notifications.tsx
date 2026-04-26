@@ -11,7 +11,7 @@ const PREFS = [
   { key: "notify_follows", label: "New followers", hint: "When someone follows you" },
   { key: "notify_reposts", label: "Reposts", hint: "When your post is reshared" },
   { key: "notify_inquiries", label: "Inquiries", hint: "Direct inquiries from travelers" },
-  { key: "notify_broadcasts", label: "Broadcasts", hint: "Important travelpod announcements" },
+  { key: "notify_broadcasts", label: "Broadcasts", hint: "Important Safiripod announcements" },
   { key: "email_optin", label: "Email digest", hint: "Weekly summary by email" },
 ] as const;
 

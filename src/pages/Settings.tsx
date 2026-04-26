@@ -106,7 +106,7 @@ export default function Settings() {
 
       {isAdmin && (
         <Section title="Admin">
-          <Row to="/access" icon={<ShieldCheck className="h-4 w-4" />} label="travelpod admin" />
+          <Row to="/access" icon={<ShieldCheck className="h-4 w-4" />} label="Safiripod admin" />
         </Section>
       )}
 
