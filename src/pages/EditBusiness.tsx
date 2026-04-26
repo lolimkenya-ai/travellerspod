@@ -182,6 +182,9 @@ export default function EditBusiness() {
           busy={submitting}
         />
 
+        <DocumentsSection />
+        <MessagesSection />
+
         <Field label="Category">
           <select
             value={form.category_slug ?? ""}
