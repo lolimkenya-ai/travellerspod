@@ -30,6 +30,7 @@ import ChangeEmail from "./pages/settings/ChangeEmail";
 import Sessions from "./pages/settings/Sessions";
 import DeleteAccount from "./pages/settings/DeleteAccount";
 import Access from "./pages/Access";
+import AccessCompose from "./pages/AccessCompose";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
