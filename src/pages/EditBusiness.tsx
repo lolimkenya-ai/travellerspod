@@ -340,3 +340,263 @@ function VerificationCard({
     </div>
   );
 }
+
+/* ----------------------- Verification documents ----------------------- */
+
+interface VDoc {
+  id: string;
+  label: string;
+  file_url: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  status: string;
+  flag_reason: string | null;
+  review_message: string | null;
+  created_at: string;
+}
+
+function DocumentsSection() {
+  const { user } = useAuth();
+  const [docs, setDocs] = useState<VDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [label, setLabel] = useState("");
+
+  async function refresh() {
+    if (!user) return;
+    setLoading(true);
+    const { data } = await supabase
+      .from("verification_documents")
+      .select("*")
+      .eq("profile_id", user.id)
+      .order("created_at", { ascending: false });
+    setDocs((data ?? []) as VDoc[]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    refresh();
+  }, [user?.id]);
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !user) return;
+    if (!label.trim()) {
+      toast.error("Add a label first (e.g. 'Business registration', 'License').");
+      return;
+    }
+    if (f.size > 15 * 1024 * 1024) {
+      toast.error("Max 15 MB per file.");
+      return;
+    }
+    setUploading(true);
+    const ext = f.name.split(".").pop()?.toLowerCase() ?? "bin";
+    const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+    const up = await supabase.storage.from("verification-docs").upload(path, f, {
+      upsert: false,
+      contentType: f.type || undefined,
+      cacheControl: "0",
+    });
+    if (up.error) {
+      setUploading(false);
+      toast.error(up.error.message);
+      return;
+    }
+    // private bucket — store the storage path; admins/users get signed URLs on view.
+    const { data: signed } = await supabase.storage.from("verification-docs").createSignedUrl(path, 60 * 60 * 24 * 7);
+    const file_url = signed?.signedUrl ?? path;
+    const { error } = await supabase.from("verification_documents").insert({
+      profile_id: user.id,
+      label: label.trim().slice(0, 80),
+      file_url,
+      content_type: f.type || null,
+      size_bytes: f.size,
+      status: "pending",
+    });
+    setUploading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Document uploaded");
+      setLabel("");
+      refresh();
+    }
+  }
+
+  async function remove(d: VDoc) {
+    if (d.status !== "pending") {
+      toast.error("Only pending documents can be removed.");
+      return;
+    }
+    if (!confirm("Remove this document?")) return;
+    const { error } = await supabase.from("verification_documents").delete().eq("id", d.id);
+    if (error) toast.error(error.message);
+    else refresh();
+  }
+
+  return (
+    <div className="mb-5 rounded-2xl border border-border bg-card p-4">
+      <p className="text-sm font-semibold text-foreground">Verification documents</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Upload registration certificates, licenses, association IDs. Visible only to you and Safiripod admins.
+      </p>
+
+      <div className="mt-3 flex items-center gap-2">
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Document label"
+          className="input flex-1"
+        />
+        <input ref={fileRef} type="file" hidden onChange={onPick} accept="image/*,application/pdf" />
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading || !label.trim()}
+          className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          <Upload className="h-3.5 w-3.5" /> {uploading ? "Uploading…" : "Upload"}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="mt-4 flex justify-center"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+      ) : docs.length === 0 ? (
+        <p className="mt-4 text-xs text-muted-foreground">No documents yet.</p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {docs.map((d) => (
+            <li key={d.id} className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-2 text-xs">
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-foreground">{d.label}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {d.content_type ?? "file"} · <StatusPill status={d.status} />
+                </p>
+                {d.flag_reason && (
+                  <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-destructive">
+                    <Flag className="h-3 w-3" /> {d.flag_reason}
+                  </p>
+                )}
+              </div>
+              <a
+                href={d.file_url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-full border border-border px-2 py-1 text-[11px] text-foreground hover:bg-accent"
+              >
+                Open
+              </a>
+              {d.status === "pending" && (
+                <button
+                  onClick={() => remove(d)}
+                  className="rounded-full bg-destructive/10 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/20"
+                  aria-label="Delete document"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    pending: "bg-muted text-muted-foreground",
+    flagged: "bg-destructive/15 text-destructive",
+    approved: "bg-verified/15 text-verified-foreground",
+  };
+  return <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${map[status] ?? map.pending}`}>{status}</span>;
+}
+
+function MessagesSection() {
+  const { user } = useAuth();
+  const [msgs, setMsgs] = useState<Array<{ id: string; body: string; author_id: string; created_at: string }>>([]);
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    if (!user) return;
+    const { data } = await supabase
+      .from("verification_messages")
+      .select("id, body, author_id, created_at")
+      .eq("profile_id", user.id)
+      .order("created_at", { ascending: true });
+    setMsgs(data ?? []);
+  }
+
+  useEffect(() => {
+    refresh();
+    if (!user) return;
+    const ch = supabase
+      .channel(`vm-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "verification_messages", filter: `profile_id=eq.${user.id}` },
+        () => refresh(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [user?.id]);
+
+  async function send() {
+    if (!user || !body.trim()) return;
+    setBusy(true);
+    const { error } = await supabase
+      .from("verification_messages")
+      .insert({ profile_id: user.id, author_id: user.id, body: body.trim().slice(0, 1000) });
+    setBusy(false);
+    if (error) toast.error(error.message);
+    else {
+      setBody("");
+      refresh();
+    }
+  }
+
+  return (
+    <div className="mb-5 rounded-2xl border border-border bg-card p-4">
+      <p className="text-sm font-semibold text-foreground">Messages with admins</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Use this thread to ask questions or read why your verification was approved or rejected.
+      </p>
+      <div className="mt-3 max-h-64 space-y-2 overflow-y-auto rounded-lg bg-muted/30 p-2">
+        {msgs.length === 0 && <p className="py-3 text-center text-xs text-muted-foreground">No messages yet.</p>}
+        {msgs.map((m) => {
+          const mine = m.author_id === user?.id;
+          return (
+            <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${mine ? "bg-primary text-primary-foreground" : "bg-card border border-border text-foreground"}`}>
+                <p className="whitespace-pre-wrap">{m.body}</p>
+                <p className="mt-1 text-[9px] opacity-60">{new Date(m.created_at).toLocaleString()}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && send()}
+          placeholder="Ask an admin…"
+          className="input flex-1"
+          maxLength={1000}
+        />
+        <button
+          onClick={send}
+          disabled={busy || !body.trim()}
+          className="rounded-full bg-foreground px-3 py-2 text-xs font-semibold text-background disabled:opacity-50"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
