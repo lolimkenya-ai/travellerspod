@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BadgeCheck, Settings as SettingsIcon, Briefcase, Loader2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Settings as SettingsIcon, Briefcase, Loader2, AlertTriangle, X, Bookmark } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext";
@@ -9,11 +9,12 @@ import { VerifiedBusinessModal } from "@/components/profile/VerifiedBusinessModa
 import { Feed } from "@/components/feed/Feed";
 import { usePosts } from "@/hooks/usePosts";
 import { toast } from "sonner";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { Database } from "@/integrations/supabase/types";
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
-const TABS = ["Posts", "Reposts", "Followers", "Following"] as const;
+const TABS = ["Posts", "Reposts", "Boards"] as const;
 type Tab = (typeof TABS)[number];
 
 interface MiniProfile {
@@ -22,6 +23,14 @@ interface MiniProfile {
   display_name: string;
   avatar_url: string | null;
   verified: boolean;
+}
+
+interface BoardRow {
+  id: string;
+  name: string;
+  location: string | null;
+  covers: { post_id: string; poster_url: string | null; media_url: string | null }[];
+  post_count: number;
 }
 
 export default function Profile() {
@@ -36,6 +45,7 @@ export default function Profile() {
   const [following, setFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
+  const [followSheet, setFollowSheet] = useState<null | "followers" | "following">(null);
 
   const isMe = !!meProfile && meProfile.nametag === nametag;
 
@@ -198,11 +208,11 @@ export default function Profile() {
         {profile.bio && <p className="mt-3 text-sm text-foreground">{profile.bio}</p>}
 
         <div className="mt-4 flex items-center gap-5 text-sm">
-          <button onClick={() => setTab("Followers")} className="hover:underline">
+          <button onClick={() => setFollowSheet("followers")} className="hover:underline">
             <span className="font-semibold text-foreground">{formatCount(profile.followers_count)}</span>{" "}
             <span className="text-muted-foreground">followers</span>
           </button>
-          <button onClick={() => setTab("Following")} className="hover:underline">
+          <button onClick={() => setFollowSheet("following")} className="hover:underline">
             <span className="font-semibold text-foreground">{formatCount(profile.following_count)}</span>{" "}
             <span className="text-muted-foreground">following</span>
           </button>
@@ -277,9 +287,26 @@ export default function Profile() {
             <Feed posts={reposts} emptyTitle="No reposts yet" />
           ))}
 
-        {tab === "Followers" && <FollowList kind="followers" profileId={profile.id} />}
-        {tab === "Following" && <FollowList kind="following" profileId={profile.id} />}
+        {tab === "Boards" && <BoardsGrid ownerId={profile.id} isMe={isMe} />}
       </div>
+
+      <Sheet open={!!followSheet} onOpenChange={(o) => !o && setFollowSheet(null)}>
+        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto p-0">
+          <SheetHeader className="sticky top-0 z-10 flex flex-row items-center justify-between border-b border-border bg-background px-4 py-3">
+            <SheetTitle className="text-base">
+              {followSheet === "followers" ? "Followers" : "Following"}
+            </SheetTitle>
+            <button
+              onClick={() => setFollowSheet(null)}
+              className="rounded-full p-1 hover:bg-accent"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </SheetHeader>
+          {followSheet && <FollowList kind={followSheet} profileId={profile.id} />}
+        </SheetContent>
+      </Sheet>
 
       <VerifiedBusinessModal
         open={bizOpen}
@@ -295,6 +322,111 @@ function Spinner() {
   return (
     <div className="flex items-center justify-center py-10">
       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
+function BoardsGrid({ ownerId, isMe }: { ownerId: string; isMe: boolean }) {
+  const navigate = useNavigate();
+  const [boards, setBoards] = useState<BoardRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const { data: b } = await supabase
+        .from("boards")
+        .select("id, name, location")
+        .eq("owner_id", ownerId)
+        .order("created_at", { ascending: false });
+      if (cancelled) return;
+      const ids = (b ?? []).map((x) => x.id);
+      const covers = new Map<string, { post_id: string; poster_url: string | null; media_url: string | null }[]>();
+      const counts = new Map<string, number>();
+      if (ids.length) {
+        const { data: bp } = await supabase
+          .from("board_posts")
+          .select("board_id, post_id, posts!inner ( poster_url, media_url )")
+          .in("board_id", ids)
+          .order("added_at", { ascending: false });
+        for (const row of (bp ?? []) as Array<{
+          board_id: string;
+          post_id: string;
+          posts: { poster_url: string | null; media_url: string | null } | null;
+        }>) {
+          counts.set(row.board_id, (counts.get(row.board_id) ?? 0) + 1);
+          const arr = covers.get(row.board_id) ?? [];
+          if (arr.length < 4) {
+            arr.push({
+              post_id: row.post_id,
+              poster_url: row.posts?.poster_url ?? null,
+              media_url: row.posts?.media_url ?? null,
+            });
+          }
+          covers.set(row.board_id, arr);
+        }
+      }
+      if (cancelled) return;
+      setBoards(
+        (b ?? []).map((x) => ({
+          id: x.id,
+          name: x.name,
+          location: x.location,
+          covers: covers.get(x.id) ?? [],
+          post_count: counts.get(x.id) ?? 0,
+        })),
+      );
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerId]);
+
+  if (loading) return <Spinner />;
+  if (boards.length === 0) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center px-8 text-center">
+        <Bookmark className="mb-2 h-6 w-6 text-muted-foreground" />
+        <h2 className="text-base font-semibold text-foreground">No boards yet</h2>
+        {isMe && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Save posts to a board to organize trips.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-3 px-4 pt-4">
+      {boards.map((b) => (
+        <button
+          key={b.id}
+          onClick={() => navigate(`/boards/${b.id}`)}
+          className="flex flex-col gap-2 text-left"
+        >
+          <div className="grid aspect-square grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-2xl bg-muted">
+            {Array.from({ length: 4 }).map((_, i) => {
+              const c = b.covers[i];
+              const src = c?.poster_url ?? c?.media_url ?? null;
+              return (
+                <div key={i} className="bg-muted">
+                  {src && <img src={src} alt="" className="h-full w-full object-cover" />}
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-1">
+            <p className="truncate text-sm font-semibold text-foreground">{b.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {b.post_count} {b.post_count === 1 ? "post" : "posts"}
+              {b.location ? ` · ${b.location}` : ""}
+            </p>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
