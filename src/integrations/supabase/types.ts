@@ -883,6 +883,7 @@ export type Database = {
           id: string
           label: string
           profile_id: string
+          review_message: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           size_bytes: number | null
@@ -896,6 +897,7 @@ export type Database = {
           id?: string
           label: string
           profile_id: string
+          review_message?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           size_bytes?: number | null
@@ -909,6 +911,7 @@ export type Database = {
           id?: string
           label?: string
           profile_id?: string
+          review_message?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           size_bytes?: number | null
@@ -966,6 +969,10 @@ export type Database = {
         Returns: boolean
       }
       claim_first_admin: { Args: never; Returns: boolean }
+      decide_verification: {
+        Args: { _decision: string; _profile: string; _reason?: string }
+        Returns: undefined
+      }
       delete_my_account: { Args: never; Returns: undefined }
       ensure_super_admin: { Args: never; Returns: boolean }
       flag_document: {
