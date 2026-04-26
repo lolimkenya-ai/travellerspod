@@ -1,23 +1,33 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BadgeCheck, Settings, Briefcase, Loader2 } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Settings as SettingsIcon, Briefcase, Loader2, AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext";
 import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { VerifiedBusinessModal } from "@/components/profile/VerifiedBusinessModal";
+import { Feed } from "@/components/feed/Feed";
+import { usePosts } from "@/hooks/usePosts";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
-const TABS = ["Posts", "Reposts", "Boards"] as const;
+const TABS = ["Posts", "Reposts", "Followers", "Following"] as const;
 type Tab = (typeof TABS)[number];
+
+interface MiniProfile {
+  id: string;
+  nametag: string;
+  display_name: string;
+  avatar_url: string | null;
+  verified: boolean;
+}
 
 export default function Profile() {
   const { nametag = "" } = useParams();
   const navigate = useNavigate();
-  const { user, profile: meProfile, signOut } = useAuth();
+  const { user, profile: meProfile } = useAuth();
   const requireAuth = useRequireAuth();
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -58,6 +68,14 @@ export default function Profile() {
       cancelled = true;
     };
   }, [nametag, user]);
+
+  const { posts: authorPosts, loading: postsLoading } = usePosts({
+    scope: "author",
+    authorId: profile?.id,
+  });
+
+  const reposts = authorPosts.filter((p) => p.quote);
+  const originals = authorPosts.filter((p) => !p.quote);
 
   async function toggleFollow() {
     if (!profile) return;
@@ -121,14 +139,28 @@ export default function Profile() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <h1 className="text-sm font-semibold text-foreground">@{profile.nametag}</h1>
-        <button
-          aria-label="Settings"
-          onClick={isMe ? () => signOut() : undefined}
-          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent"
-        >
-          <Settings className="h-5 w-5" />
-        </button>
+        {isMe ? (
+          <button
+            aria-label="Settings"
+            onClick={() => navigate("/settings")}
+            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent"
+          >
+            <SettingsIcon className="h-5 w-5" />
+          </button>
+        ) : (
+          <span className="h-9 w-9" />
+        )}
       </header>
+
+      {profile.flagged_danger && (
+        <div className="mx-4 mt-3 flex items-start gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-xs">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div>
+            <p className="font-semibold text-destructive">Flagged account</p>
+            {profile.danger_reason && <p className="mt-1 text-destructive/90">{profile.danger_reason}</p>}
+          </div>
+        </div>
+      )}
 
       <div className="px-4 pt-5">
         <div className="flex items-start gap-4">
@@ -166,17 +198,32 @@ export default function Profile() {
         {profile.bio && <p className="mt-3 text-sm text-foreground">{profile.bio}</p>}
 
         <div className="mt-4 flex items-center gap-5 text-sm">
-          <span>
+          <button onClick={() => setTab("Followers")} className="hover:underline">
             <span className="font-semibold text-foreground">{formatCount(profile.followers_count)}</span>{" "}
             <span className="text-muted-foreground">followers</span>
-          </span>
-          <span>
+          </button>
+          <button onClick={() => setTab("Following")} className="hover:underline">
             <span className="font-semibold text-foreground">{formatCount(profile.following_count)}</span>{" "}
             <span className="text-muted-foreground">following</span>
-          </span>
+          </button>
         </div>
 
-        {!isMe && (
+        {isMe ? (
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => navigate("/settings/profile")}
+              className="flex-1 rounded-full border border-border py-2 text-sm font-semibold text-foreground hover:bg-accent"
+            >
+              Edit profile
+            </button>
+            <button
+              onClick={() => navigate("/settings")}
+              className="flex-1 rounded-full border border-border py-2 text-sm font-semibold text-foreground hover:bg-accent"
+            >
+              Settings
+            </button>
+          </div>
+        ) : (
           <div className="mt-4 flex gap-2">
             <button
               onClick={toggleFollow}
@@ -206,7 +253,7 @@ export default function Profile() {
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "flex-1 border-b-2 py-3 text-sm font-semibold transition-colors",
+              "flex-1 border-b-2 py-3 text-xs font-semibold transition-colors sm:text-sm",
               tab === t ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
             )}
           >
@@ -215,11 +262,24 @@ export default function Profile() {
         ))}
       </nav>
 
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        {tab === "Posts" && "No posts yet."}
-        {tab === "Reposts" && "No reposts yet."}
-        {tab === "Boards" && "No boards yet."}
-      </p>
+      <div className="pb-12">
+        {tab === "Posts" &&
+          (postsLoading ? (
+            <Spinner />
+          ) : (
+            <Feed posts={originals} emptyTitle="No posts yet" emptyBody={isMe ? "Tap + to share your first trip." : ""} />
+          ))}
+
+        {tab === "Reposts" &&
+          (postsLoading ? (
+            <Spinner />
+          ) : (
+            <Feed posts={reposts} emptyTitle="No reposts yet" />
+          ))}
+
+        {tab === "Followers" && <FollowList kind="followers" profileId={profile.id} />}
+        {tab === "Following" && <FollowList kind="following" profileId={profile.id} />}
+      </div>
 
       <VerifiedBusinessModal
         open={bizOpen}
@@ -228,5 +288,154 @@ export default function Profile() {
         displayName={profile.display_name}
       />
     </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <div className="flex items-center justify-center py-10">
+      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
+function FollowList({ profileId, kind }: { profileId: string; kind: "followers" | "following" }) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [list, setList] = useState<MiniProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      // Use explicit FK aliases so PostgREST embeds the right side.
+      const select =
+        kind === "followers"
+          ? "follower:profiles!follows_follower_id_fkey(id, nametag, display_name, avatar_url, verified)"
+          : "followee:profiles!follows_followee_id_fkey(id, nametag, display_name, avatar_url, verified)";
+      const filter = kind === "followers" ? "followee_id" : "follower_id";
+
+      const { data, error } = await supabase
+        .from("follows")
+        .select(select)
+        .eq(filter, profileId)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (cancelled) return;
+      if (error) {
+        // Fallback if FK alias names differ — fetch ids then resolve profiles.
+        const idCol = kind === "followers" ? "follower_id" : "followee_id";
+        const { data: rows } = await supabase.from("follows").select(idCol).eq(filter, profileId).limit(200);
+        const ids = (rows ?? []).map((r: any) => r[idCol]).filter(Boolean);
+        if (ids.length) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, nametag, display_name, avatar_url, verified")
+            .in("id", ids);
+          setList((profs ?? []) as MiniProfile[]);
+        } else {
+          setList([]);
+        }
+      } else {
+        const out: MiniProfile[] = (data ?? [])
+          .map((r: any) => (kind === "followers" ? r.follower : r.followee))
+          .filter(Boolean);
+        setList(out);
+      }
+      setLoading(false);
+
+      if (user) {
+        const { data: my } = await supabase
+          .from("follows")
+          .select("followee_id")
+          .eq("follower_id", user.id);
+        if (!cancelled) setFollowingSet(new Set((my ?? []).map((r) => r.followee_id)));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, kind, user]);
+
+  async function toggle(id: string) {
+    if (!user) return;
+    if (id === user.id) {
+      toast.error("You can't follow yourself");
+      return;
+    }
+    const isFollowing = followingSet.has(id);
+    const next = new Set(followingSet);
+    if (isFollowing) {
+      next.delete(id);
+      setFollowingSet(next);
+      const { error } = await supabase
+        .from("follows")
+        .delete()
+        .eq("follower_id", user.id)
+        .eq("followee_id", id);
+      if (error) {
+        next.add(id);
+        setFollowingSet(new Set(next));
+        toast.error(error.message);
+      }
+    } else {
+      next.add(id);
+      setFollowingSet(next);
+      const { error } = await supabase.from("follows").insert({ follower_id: user.id, followee_id: id });
+      if (error) {
+        next.delete(id);
+        setFollowingSet(new Set(next));
+        toast.error(error.message);
+      }
+    }
+  }
+
+  if (loading) return <Spinner />;
+  if (list.length === 0)
+    return <p className="px-6 py-12 text-center text-sm text-muted-foreground">Nobody here yet.</p>;
+
+  return (
+    <ul className="divide-y divide-border">
+      {list.map((p) => {
+        const isMe = user?.id === p.id;
+        const isFollowing = followingSet.has(p.id);
+        return (
+          <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+            <button
+              onClick={() => navigate(`/profile/${p.nametag}`)}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            >
+              <img
+                src={p.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(p.display_name)}`}
+                alt=""
+                className="h-11 w-11 rounded-full object-cover ring-1 ring-border"
+              />
+              <div className="min-w-0">
+                <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
+                  {p.display_name}
+                  {p.verified && <BadgeCheck className="h-3.5 w-3.5 fill-verified text-verified-foreground" />}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">@{p.nametag}</p>
+              </div>
+            </button>
+            {!isMe && user && (
+              <button
+                onClick={() => toggle(p.id)}
+                className={cn(
+                  "rounded-full px-4 py-1.5 text-xs font-semibold transition-colors",
+                  isFollowing
+                    ? "border border-border bg-muted text-foreground"
+                    : "bg-foreground text-background",
+                )}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
