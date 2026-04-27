@@ -1,28 +1,13 @@
-import { useNavigate, Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
-  BadgeCheck,
-  ShieldCheck,
-  ShieldOff,
-  Loader2,
-  KeyRound,
-  ScrollText,
-  FileText,
-  Search as SearchIcon,
-  Trash2,
-  Eye,
-  Flag,
-  AlertTriangle,
-  PenSquare,
+  ArrowLeft, BadgeCheck, ShieldCheck, ShieldOff, Loader2, KeyRound,
+  ShieldAlert, Sparkles, FileText, ExternalLink, Save,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRoles } from "@/hooks/useRoles";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-
-type Tab = "queue" | "verified" | "users" | "posts" | "audit";
 
 interface PendingProfile {
   id: string;
@@ -30,72 +15,109 @@ interface PendingProfile {
   nametag: string;
   avatar_url: string | null;
   verification_status: "unverified" | "pending" | "verified";
-  account_type: string;
-  flagged_danger?: boolean;
-  danger_reason?: string | null;
-  business: {
-    category_slug: string | null;
-    associations: string | null;
-    registration_number: string | null;
-    address: string | null;
-    country: string | null;
-    contact_email: string | null;
-    contact_phone: string | null;
-    website: string | null;
-  } | null;
+  business: BusinessRow | null;
 }
 
-interface UserRow {
-  id: string;
-  display_name: string;
-  nametag: string;
-  avatar_url: string | null;
-  account_type: string;
-  verified: boolean;
-  flagged_danger: boolean;
-  followers_count: number;
-  roles: string[];
+interface BusinessRow {
+  category_slug: string | null;
+  associations: string | null;
+  registration_number: string | null;
+  address: string | null;
+  country: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  website: string | null;
+  tra_listing_url: string | null;
+  kata_listing_url: string | null;
+  kato_listing_url: string | null;
 }
 
-interface PostRow {
-  id: string;
-  caption: string;
-  media_type: string;
-  is_broadcast: boolean;
-  created_at: string;
-  author: { display_name: string; nametag: string; avatar_url: string | null } | null;
-}
-
-interface AuditRow {
-  id: string;
-  actor_email: string | null;
-  actor_id: string | null;
-  action: string;
-  entity_type: string | null;
-  entity_id: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
-}
-
-interface VDoc {
+interface VerificationDoc {
   id: string;
   label: string;
   file_url: string;
-  content_type: string | null;
-  size_bytes: number | null;
   status: string;
   flag_reason: string | null;
-  review_message: string | null;
   created_at: string;
 }
 
-export default function Access() {
+interface AiReview {
+  id: string;
+  summary: string | null;
+  risk_level: "low" | "medium" | "high" | "unknown";
+  findings: string[];
+  sources: { url: string; title?: string; org?: string; snippet?: string }[];
+  created_at: string;
+}
+
+export default function Admin() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isAdmin, isSuperAdmin, loading: rolesLoading } = useRoles();
-  const [tab, setTab] = useState<Tab>("queue");
+  const { isAdmin, isSuperAdmin, isModerator, loading: roleLoading } = useRoles();
+  const [hasAnyAdmin, setHasAnyAdmin] = useState<boolean | null>(null);
+  const [pending, setPending] = useState<PendingProfile[]>([]);
+  const [verified, setVerified] = useState<PendingProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  if (rolesLoading) {
+  async function refresh() {
+    setLoading(true);
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, display_name, nametag, avatar_url, verification_status")
+      .in("verification_status", ["pending", "verified"])
+      .order("updated_at", { ascending: false });
+
+    const ids = (profiles ?? []).map((p) => p.id);
+    let bizMap = new Map<string, any>();
+    if (ids.length) {
+      const { data: biz } = await supabase
+        .from("business_details")
+        .select("*")
+        .in("profile_id", ids);
+      biz?.forEach((b) => bizMap.set(b.profile_id, b));
+    }
+    const enriched =
+      profiles?.map((p) => ({ ...(p as any), business: bizMap.get(p.id) ?? null })) ?? [];
+    setPending(enriched.filter((p) => p.verification_status === "pending"));
+    setVerified(enriched.filter((p) => p.verification_status === "verified"));
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    supabase
+      .from("user_roles")
+      .select("id", { head: true, count: "exact" })
+      .eq("role", "admin")
+      .then(({ count }) => setHasAnyAdmin((count ?? 0) > 0));
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) refresh();
+  }, [isAdmin]);
+
+  async function setStatus(id: string, status: "verified" | "unverified") {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ verification_status: status, verified: status === "verified" })
+      .eq("id", id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(status === "verified" ? "Approved" : "Revoked");
+      refresh();
+    }
+  }
+
+  async function claimAdmin() {
+    const { error } = await supabase.rpc("claim_first_admin");
+    if (error) toast.error(error.message);
+    else {
+      toast.success("You are now an admin");
+      window.location.reload();
+    }
+  }
+
+  if (roleLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -105,748 +127,483 @@ export default function Access() {
 
   if (!user) {
     return (
-      <Frame back={() => navigate("/")} title="Access">
-        <Empty
-          icon={<KeyRound className="h-8 w-8 text-muted-foreground" />}
-          title="Sign in required"
-          subtitle="Sign in with the super-admin account to manage Safiripod."
-        />
-      </Frame>
+      <div className="mx-auto min-h-screen max-w-[480px] bg-background p-8 text-center text-sm text-muted-foreground">
+        Sign in to access admin tools.
+      </div>
     );
   }
 
   if (!isAdmin) {
     return (
-      <Frame back={() => navigate("/")} title="Access">
-        <Empty
-          icon={<KeyRound className="h-8 w-8 text-muted-foreground" />}
-          title="Access denied"
-          subtitle="This area is for Safiripod admins only."
-        />
-      </Frame>
-    );
-  }
-
-  return (
-    <Frame back={() => navigate("/")} title="Safiripod admin">
-      <div className="sticky top-[57px] z-10 -mt-px overflow-x-auto border-b border-border bg-background/95 backdrop-blur-md">
-        <div className="mx-auto flex min-w-max max-w-6xl items-center justify-between gap-2 px-3 py-2">
-          <div className="flex gap-1">
-            {([
-              ["queue", "Queue"],
-              ["verified", "Verified"],
-              ["users", "Users"],
-              ["posts", "Posts"],
-              ...(isSuperAdmin ? ([["audit", "Audit log"]] as const) : []),
-            ] as const).map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => setTab(k as Tab)}
-                className={cn(
-                  "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-                  tab === k
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+      <div className="mx-auto min-h-screen max-w-[480px] bg-background">
+        <Header back={() => navigate(-1)} title="Admin" />
+        <div className="p-6">
+          <div className="rounded-2xl border border-border bg-card p-5 text-center">
+            <KeyRound className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-3 text-sm font-semibold text-foreground">Admin access required</p>
+            {hasAnyAdmin === false ? (
+              <>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  No admin exists yet. Claim the first admin role for this project.
+                </p>
+                <button
+                  onClick={claimAdmin}
+                  className="mt-4 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
+                >
+                  Claim first admin
+                </button>
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Ask an existing admin to grant you the role.
+              </p>
+            )}
           </div>
-          {isSuperAdmin && (
-            <Link
-              to="/access/compose"
-              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              <PenSquare className="h-3.5 w-3.5" /> Post as Safiripod
-            </Link>
-          )}
         </div>
       </div>
-
-      <div className="mx-auto max-w-6xl">
-        {tab === "queue" && <QueueTab />}
-        {tab === "verified" && <VerifiedTab />}
-        {tab === "users" && <UsersTab isSuperAdmin={isSuperAdmin} />}
-        {tab === "posts" && <PostsTab />}
-        {tab === "audit" && isSuperAdmin && <AuditTab />}
-      </div>
-    </Frame>
-  );
-}
-
-/* ------------------------- Queue ------------------------- */
-
-function QueueTab() {
-  const [pending, setPending] = useState<PendingProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [openId, setOpenId] = useState<string | null>(null);
-
-  async function refresh() {
-    setLoading(true);
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, display_name, nametag, avatar_url, verification_status, account_type, flagged_danger, danger_reason")
-      .eq("verification_status", "pending")
-      .order("updated_at", { ascending: false });
-    const ids = (profiles ?? []).map((p) => p.id);
-    const map = new Map<string, PendingProfile["business"]>();
-    if (ids.length) {
-      const { data: biz } = await supabase.from("business_details").select("*").in("profile_id", ids);
-      biz?.forEach((b) => map.set(b.profile_id, b as PendingProfile["business"]));
-    }
-    setPending(
-      (profiles ?? []).map((p: any) => ({ ...(p as PendingProfile), business: map.get(p.id) ?? null })),
     );
-    setLoading(false);
   }
 
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  if (loading) return <Spinner />;
-  if (pending.length === 0)
-    return (
-      <Empty
-        icon={<ShieldCheck className="h-8 w-8 text-muted-foreground" />}
-        title="Queue empty"
-        subtitle="No pending verification requests."
-      />
-    );
-
   return (
-    <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-      {pending.map((p) => (
-        <ReviewCard
-          key={p.id}
-          profile={p}
-          expanded={openId === p.id}
-          onToggle={() => setOpenId((prev) => (prev === p.id ? null : p.id))}
-          onChanged={refresh}
-        />
-      ))}
+    <div className="mx-auto min-h-screen max-w-3xl bg-background">
+      <Header back={() => navigate(-1)} title="Verification queue" />
+
+      <div className="flex flex-wrap gap-2 px-4 pt-3">
+        <Link
+          to="/access/reports"
+          className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
+        >
+          <ShieldAlert className="h-3 w-3" /> Reports queue
+        </Link>
+        {isSuperAdmin && (
+          <Link
+            to="/access/compose"
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+          >
+            Post as Safiripod
+          </Link>
+        )}
+      </div>
+
+      <Section title={`Pending (${pending.length})`}>
+        {loading ? (
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        ) : pending.length === 0 ? (
+          <Empty text="No pending requests." />
+        ) : (
+          <div className="space-y-3">
+            {pending.map((p) => (
+              <BusinessRow
+                key={p.id}
+                profile={p}
+                expanded={openId === p.id}
+                onToggle={() => setOpenId(openId === p.id ? null : p.id)}
+                onApprove={() => setStatus(p.id, "verified")}
+                onChanged={refresh}
+                isSuperAdmin={isSuperAdmin}
+              />
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title={`Verified (${verified.length})`}>
+        {verified.length === 0 ? (
+          <Empty text="No verified businesses yet." />
+        ) : (
+          <div className="space-y-3">
+            {verified.map((p) => (
+              <BusinessRow
+                key={p.id}
+                profile={p}
+                expanded={openId === p.id}
+                onToggle={() => setOpenId(openId === p.id ? null : p.id)}
+                onRevoke={() => setStatus(p.id, "unverified")}
+                onChanged={refresh}
+                verified
+                isSuperAdmin={isSuperAdmin}
+              />
+            ))}
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
 
-function ReviewCard({
-  profile,
-  expanded,
-  onToggle,
-  onChanged,
+function Header({ back, title }: { back: () => void; title: string }) {
+  return (
+    <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur-md">
+      <button onClick={back} aria-label="Back" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent">
+        <ArrowLeft className="h-5 w-5" />
+      </button>
+      <h1 className="text-base font-semibold text-foreground">{title}</h1>
+    </header>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return <p className="text-sm text-muted-foreground">{text}</p>;
+}
+
+function BusinessRow({
+  profile, expanded, onToggle, onApprove, onRevoke, onChanged, verified, isSuperAdmin,
 }: {
   profile: PendingProfile;
   expanded: boolean;
   onToggle: () => void;
+  onApprove?: () => void;
+  onRevoke?: () => void;
   onChanged: () => void;
+  verified?: boolean;
+  isSuperAdmin: boolean;
 }) {
   const b = profile.business;
-  const [docs, setDocs] = useState<VDoc[]>([]);
-  const [docsLoading, setDocsLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [reason, setReason] = useState("");
-
-  useEffect(() => {
-    if (!expanded) return;
-    setDocsLoading(true);
-    supabase
-      .from("verification_documents")
-      .select("*")
-      .eq("profile_id", profile.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        setDocs((data ?? []) as VDoc[]);
-        setDocsLoading(false);
-      });
-  }, [expanded, profile.id]);
-
-  async function decide(decision: "verified" | "unverified") {
-    if (decision === "unverified" && !reason.trim()) {
-      toast.error("Please add a reason — the user will see it.");
-      return;
-    }
-    setBusy(true);
-    const { error } = await supabase.rpc("decide_verification", {
-      _profile: profile.id,
-      _decision: decision,
-      _reason: decision === "unverified" ? reason.trim() : null,
-    });
-    setBusy(false);
-    if (error) toast.error(error.message);
-    else {
-      toast.success(decision === "verified" ? "Verified" : "Rejected with reason");
-      onChanged();
-    }
-  }
-
-  async function flagDoc(d: VDoc) {
-    const r = window.prompt("Why is this document being flagged?", d.flag_reason ?? "");
-    if (r === null) return;
-    const { error } = await supabase.rpc("flag_document", {
-      _doc: d.id,
-      _flagged: true,
-      _reason: r.trim() || null,
-    });
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Flagged");
-      setDocs((arr) => arr.map((x) => (x.id === d.id ? { ...x, status: "flagged", flag_reason: r.trim() || null } : x)));
-    }
-  }
-
-  async function setDanger(on: boolean) {
-    let r: string | null = null;
-    if (on) {
-      r = window.prompt("Reason this account is dangerous? (shown to admins, used for protection)") ?? null;
-      if (!r || !r.trim()) return;
-    }
-    const { error } = await supabase.rpc("set_user_danger", {
-      _user: profile.id,
-      _flagged: on,
-      _reason: r,
-    });
-    if (error) toast.error(error.message);
-    else {
-      toast.success(on ? "Marked as danger account" : "Cleared danger flag");
-      onChanged();
-    }
-  }
-
   return (
     <div className="rounded-2xl border border-border bg-card p-3">
-      <button onClick={onToggle} className="flex w-full items-center gap-3 text-left">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 text-left"
+      >
         <img
-          src={profile.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.display_name)}`}
+          src={
+            profile.avatar_url ??
+            `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.display_name)}`
+          }
           alt=""
           className="h-12 w-12 rounded-full object-cover ring-1 ring-border"
         />
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
             {profile.display_name}
-            {profile.flagged_danger && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+            {verified && <BadgeCheck className="h-4 w-4 fill-verified text-verified-foreground" />}
           </p>
-          <p className="truncate text-xs text-muted-foreground">@{profile.nametag} · {profile.account_type}</p>
+          <p className="text-xs text-muted-foreground">@{profile.nametag}</p>
         </div>
-        <Eye className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-semibold text-primary">{expanded ? "Hide" : "Review"}</span>
       </button>
 
-      {b && (
-        <div className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
-          {b.category_slug && <Detail k="Category" v={b.category_slug} />}
-          {b.associations && <Detail k="Associations" v={b.associations} />}
-          {b.registration_number && <Detail k="Reg №" v={b.registration_number} />}
-          {(b.address || b.country) && <Detail k="Location" v={[b.address, b.country].filter(Boolean).join(", ")} />}
-          {b.contact_email && <Detail k="Email" v={b.contact_email} />}
-          {b.contact_phone && <Detail k="Phone" v={b.contact_phone} />}
-          {b.website && <Detail k="Website" v={b.website} />}
-        </div>
-      )}
+      {expanded && b && <ExpandedReview profileId={profile.id} biz={b} onSaved={onChanged} canEdit={isSuperAdmin} />}
 
-      {expanded && (
-        <div className="mt-3 border-t border-border pt-3">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Documents</p>
-          {docsLoading ? (
-            <Spinner />
-          ) : docs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {docs.map((d) => (
-                <li key={d.id} className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-2 text-xs">
-                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-foreground">{d.label}</p>
-                    <p className="truncate text-[10px] text-muted-foreground">
-                      {d.content_type ?? "file"} · {d.status}
-                      {d.flag_reason && ` · ${d.flag_reason}`}
-                    </p>
-                  </div>
-                  <a
-                    href={d.file_url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="rounded-full border border-border px-2 py-1 text-[11px] text-foreground hover:bg-accent"
-                  >
-                    Open
-                  </a>
-                  <button
-                    onClick={() => flagDoc(d)}
-                    className="rounded-full bg-destructive/10 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/20"
-                    aria-label="Flag document"
-                  >
-                    <Flag className="h-3 w-3" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={2}
-            placeholder="Reason if rejecting (shown to user in their verification thread)…"
-            className="mt-3 w-full resize-none rounded-lg border border-border bg-muted px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              disabled={busy}
-              onClick={() => decide("verified")}
-              className="inline-flex items-center justify-center gap-1 rounded-full bg-verified/20 py-2 text-xs font-semibold text-verified-foreground hover:bg-verified/30 disabled:opacity-50"
-            >
-              <ShieldCheck className="h-3.5 w-3.5" /> Approve
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => decide("unverified")}
-              className="inline-flex items-center justify-center gap-1 rounded-full bg-destructive/15 py-2 text-xs font-semibold text-destructive hover:bg-destructive/25 disabled:opacity-50"
-            >
-              <ShieldOff className="h-3.5 w-3.5" /> Reject
-            </button>
-          </div>
-
-          <div className="mt-2 grid grid-cols-1 gap-2">
-            <button
-              onClick={() => setDanger(!profile.flagged_danger)}
-              className={cn(
-                "inline-flex items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-semibold",
-                profile.flagged_danger
-                  ? "bg-muted text-foreground hover:bg-accent"
-                  : "bg-destructive/10 text-destructive hover:bg-destructive/20",
-              )}
-            >
-              <AlertTriangle className="h-3 w-3" />
-              {profile.flagged_danger ? "Clear danger flag" : "Mark as danger account"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------- Verified ------------------------- */
-
-function VerifiedTab() {
-  const [list, setList] = useState<PendingProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  async function refresh() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, display_name, nametag, avatar_url, verification_status, account_type, flagged_danger, danger_reason")
-      .eq("verification_status", "verified")
-      .order("updated_at", { ascending: false })
-      .limit(200);
-    setList(((data ?? []) as PendingProfile[]).map((p) => ({ ...p, business: null })));
-    setLoading(false);
-  }
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  async function revoke(id: string) {
-    const reason = window.prompt("Reason for revoking verification (sent to user)") ?? "";
-    if (!reason.trim()) return;
-    const { error } = await supabase.rpc("decide_verification", {
-      _profile: id,
-      _decision: "unverified",
-      _reason: reason.trim(),
-    });
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Revoked");
-      refresh();
-    }
-  }
-
-  if (loading) return <Spinner />;
-  if (list.length === 0)
-    return <Empty icon={<BadgeCheck className="h-8 w-8 text-muted-foreground" />} title="No verified accounts yet" subtitle="" />;
-
-  return (
-    <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-      {list.map((p) => (
-        <div key={p.id} className="rounded-2xl border border-border bg-card p-3">
-          <div className="flex items-center gap-3">
-            <img
-              src={p.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(p.display_name)}`}
-              alt=""
-              className="h-12 w-12 rounded-full object-cover ring-1 ring-border"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
-                {p.display_name}
-                <BadgeCheck className="h-4 w-4 fill-verified text-verified-foreground" />
-              </p>
-              <p className="text-xs text-muted-foreground">@{p.nametag}</p>
-            </div>
-          </div>
+      <div className="mt-3 flex gap-2">
+        {onApprove && (
           <button
-            onClick={() => revoke(p.id)}
-            className="mt-3 flex w-full items-center justify-center gap-1 rounded-full bg-muted py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
+            onClick={onApprove}
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-full bg-verified/20 py-1.5 text-xs font-semibold text-verified-foreground hover:bg-verified/30"
           >
-            <ShieldOff className="h-3 w-3" /> Revoke verification
+            <ShieldCheck className="h-3 w-3" /> Approve
           </button>
-        </div>
-      ))}
+        )}
+        {onRevoke && (
+          <button
+            onClick={onRevoke}
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-full bg-muted py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
+          >
+            <ShieldOff className="h-3 w-3" /> Revoke
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ------------------------- Users ------------------------- */
+function ExpandedReview({
+  profileId, biz, onSaved, canEdit,
+}: { profileId: string; biz: BusinessRow; onSaved: () => void; canEdit: boolean }) {
+  const [docs, setDocs] = useState<VerificationDoc[]>([]);
+  const [reviews, setReviews] = useState<AiReview[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [scraping, setScraping] = useState(false);
 
-function UsersTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
-  const [q, setQ] = useState("");
-  const [users, setUsers] = useState<UserRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Editable verified weblinks
+  const [tra, setTra] = useState(biz.tra_listing_url ?? "");
+  const [kata, setKata] = useState(biz.kata_listing_url ?? "");
+  const [kato, setKato] = useState(biz.kato_listing_url ?? "");
 
-  async function refresh() {
-    setLoading(true);
-    let query = supabase
-      .from("profiles")
-      .select("id, display_name, nametag, avatar_url, account_type, verified, flagged_danger, followers_count")
-      .order("followers_count", { ascending: false })
-      .limit(60);
-    if (q.trim()) {
-      const term = `%${q.trim()}%`;
-      query = query.or(`display_name.ilike.${term},nametag.ilike.${term}`);
-    }
-    const { data: profiles } = await query;
-    const ids = (profiles ?? []).map((p) => p.id);
-    const roleMap = new Map<string, string[]>();
-    if (ids.length) {
-      const { data: roles } = await supabase.from("user_roles").select("user_id, role").in("user_id", ids);
-      roles?.forEach((r) => {
-        const arr = roleMap.get(r.user_id) ?? [];
-        arr.push(r.role);
-        roleMap.set(r.user_id, arr);
+  useEffect(() => {
+    (async () => {
+      const [{ data: d }, { data: r }] = await Promise.all([
+        supabase
+          .from("verification_documents")
+          .select("id,label,file_url,status,flag_reason,created_at")
+          .eq("profile_id", profileId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("verification_ai_reviews")
+          .select("id,summary,risk_level,findings,sources,created_at")
+          .eq("profile_id", profileId)
+          .order("created_at", { ascending: false })
+          .limit(3),
+      ]);
+      setDocs((d as any) ?? []);
+      setReviews((r as any) ?? []);
+    })();
+  }, [profileId]);
+
+  async function flagDoc(id: string) {
+    const reason = window.prompt("Reason for flagging this document?");
+    if (!reason) return;
+    const { error } = await supabase
+      .from("verification_documents")
+      .update({ status: "flagged", flag_reason: reason, reviewed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) toast.error(error.message);
+    else toast.success("Flagged.");
+  }
+
+  async function runScrape() {
+    setScraping(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-business", {
+        body: { profileId },
       });
+      if (error) throw error;
+      toast.success("AI review updated.");
+      // prepend
+      setReviews((prev) => [
+        {
+          id: data.id,
+          summary: data.summary,
+          risk_level: data.risk_level,
+          findings: data.findings,
+          sources: data.sources,
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Scrape failed");
+    } finally {
+      setScraping(false);
     }
-    setUsers(
-      (profiles ?? []).map((p: any) => ({ ...(p as Omit<UserRow, "roles">), roles: roleMap.get(p.id) ?? [] })),
-    );
-    setLoading(false);
-  }
-  useEffect(() => {
-    const h = setTimeout(refresh, 200);
-    return () => clearTimeout(h);
-  }, [q]);
-
-  async function setRole(userId: string, role: "admin" | "moderator", on: boolean) {
-    if (on) {
-      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
-      if (error) return toast.error(error.message);
-      toast.success(`${role} granted`);
-    } else {
-      const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", role);
-      if (error) return toast.error(error.message);
-      toast.success(`${role} revoked`);
-    }
-    refresh();
   }
 
-  async function toggleDanger(u: UserRow) {
-    let reason: string | null = null;
-    if (!u.flagged_danger) {
-      reason = window.prompt("Reason for flagging this account as dangerous?") ?? null;
-      if (!reason || !reason.trim()) return;
-    }
-    const { error } = await supabase.rpc("set_user_danger", {
-      _user: u.id,
-      _flagged: !u.flagged_danger,
-      _reason: reason,
-    });
-    if (error) return toast.error(error.message);
-    toast.success(u.flagged_danger ? "Cleared" : "Flagged");
-    refresh();
-  }
-
-  return (
-    <div className="px-4 py-4">
-      <div className="relative mb-3">
-        <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search users by name or @tag"
-          className="w-full rounded-full border border-border bg-muted py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-      {loading ? (
-        <Spinner />
-      ) : (
-        <div className="grid gap-2 md:grid-cols-2">
-          {users.map((u) => (
-            <div key={u.id} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
-              <img
-                src={u.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.display_name)}`}
-                alt=""
-                className="h-10 w-10 rounded-full object-cover ring-1 ring-border"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
-                  {u.display_name}
-                  {u.verified && <BadgeCheck className="h-3.5 w-3.5 fill-verified text-verified-foreground" />}
-                  {u.flagged_danger && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  @{u.nametag} · {u.account_type} · {u.followers_count} followers
-                </p>
-                {u.roles.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {u.roles.map((r) => (
-                      <span key={r} className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                        {r}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                {isSuperAdmin && (
-                  <>
-                    <RoleToggle on={u.roles.includes("admin")} label="Admin" onChange={(v) => setRole(u.id, "admin", v)} />
-                    <RoleToggle on={u.roles.includes("moderator")} label="Mod" onChange={(v) => setRole(u.id, "moderator", v)} />
-                  </>
-                )}
-                <button
-                  onClick={() => toggleDanger(u)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                    u.flagged_danger
-                      ? "border-border text-foreground hover:bg-accent"
-                      : "border-destructive/40 text-destructive hover:bg-destructive/10",
-                  )}
-                >
-                  {u.flagged_danger ? "Unflag" : "Flag"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RoleToggle({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      className={cn(
-        "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-        on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-/* ------------------------- Posts ------------------------- */
-
-function PostsTab() {
-  const [q, setQ] = useState("");
-  const [posts, setPosts] = useState<PostRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  async function refresh() {
-    setLoading(true);
-    let query = supabase
-      .from("posts")
-      .select("id, caption, media_type, is_broadcast, created_at, profiles!posts_author_id_fkey(display_name, nametag, avatar_url)")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (q.trim()) query = query.ilike("caption", `%${q.trim()}%`);
-    const { data } = await query;
-    setPosts(
-      (data ?? []).map((p: any) => ({
-        id: p.id,
-        caption: p.caption,
-        media_type: p.media_type,
-        is_broadcast: p.is_broadcast,
-        created_at: p.created_at,
-        author: p.profiles ?? null,
-      })),
-    );
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    const h = setTimeout(refresh, 200);
-    return () => clearTimeout(h);
-  }, [q]);
-
-  async function remove(id: string) {
-    if (!confirm("Delete this post permanently?")) return;
-    const { error } = await supabase.from("posts").delete().eq("id", id);
+  async function saveLinks() {
+    setBusy(true);
+    const { error } = await supabase
+      .from("business_details")
+      .update({
+        tra_listing_url: tra.trim() || null,
+        kata_listing_url: kata.trim() || null,
+        kato_listing_url: kato.trim() || null,
+      })
+      .eq("profile_id", profileId);
+    setBusy(false);
     if (error) toast.error(error.message);
     else {
-      toast.success("Removed");
-      refresh();
+      toast.success("Verified links saved.");
+      onSaved();
     }
   }
 
-  return (
-    <div className="px-4 py-4">
-      <div className="relative mb-3">
-        <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search posts by caption"
-          className="w-full rounded-full border border-border bg-muted py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-      {loading ? (
-        <Spinner />
-      ) : (
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-          {posts.map((p) => (
-            <div key={p.id} className="rounded-2xl border border-border bg-card p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">
-                    @{p.author?.nametag ?? "?"} · {p.media_type}
-                    {p.is_broadcast && <span className="ml-2 rounded-full bg-primary/15 px-2 text-[10px] font-bold text-primary">BROADCAST</span>}
-                  </p>
-                  <p className="mt-1 line-clamp-3 text-sm text-foreground">{p.caption}</p>
-                </div>
-                <button
-                  onClick={() => remove(p.id)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-destructive hover:bg-destructive/10"
-                  aria-label="Delete post"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------- Audit ------------------------- */
-
-function AuditTab() {
-  const [logs, setLogs] = useState<AuditRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionFilter, setActionFilter] = useState("");
-
-  async function refresh() {
-    setLoading(true);
-    let q = supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(200);
-    if (actionFilter) q = q.eq("action", actionFilter);
-    const { data } = await q;
-    setLogs((data ?? []) as AuditRow[]);
-    setLoading(false);
+  async function flagDanger(reason: string) {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ flagged_danger: true, danger_reason: reason })
+      .eq("id", profileId);
+    if (error) toast.error(error.message);
+    else toast.success("Account flagged as danger.");
   }
-  useEffect(() => {
-    refresh();
-  }, [actionFilter]);
 
-  const actions = useMemo(() => Array.from(new Set(logs.map((l) => l.action))), [logs]);
+  const top = reviews[0];
 
   return (
-    <div className="px-4 py-4">
-      <div className="mb-3 flex flex-wrap gap-2">
-        <button
-          onClick={() => setActionFilter("")}
-          className={cn(
-            "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-            !actionFilter ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground",
-          )}
-        >
-          All
-        </button>
-        {actions.map((a) => (
-          <button
-            key={a}
-            onClick={() => setActionFilter(a)}
-            className={cn(
-              "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-              actionFilter === a ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground",
-            )}
-          >
-            {a}
-          </button>
-        ))}
+    <div className="mt-3 space-y-4 border-t border-border pt-3 text-xs">
+      {/* Submitted business details */}
+      <div className="space-y-1 text-foreground">
+        {biz.category_slug && <Detail k="Category" v={biz.category_slug} />}
+        {biz.associations && <Detail k="Claimed memberships" v={biz.associations} />}
+        {biz.registration_number && <Detail k="Reg #" v={biz.registration_number} />}
+        {(biz.address || biz.country) && (
+          <Detail k="Location" v={[biz.address, biz.country].filter(Boolean).join(", ")} />
+        )}
+        {biz.contact_email && <Detail k="Email" v={biz.contact_email} />}
+        {biz.contact_phone && <Detail k="Phone" v={biz.contact_phone} />}
+        {biz.website && <Detail k="Website" v={biz.website} />}
       </div>
-      {loading ? (
-        <Spinner />
-      ) : logs.length === 0 ? (
-        <Empty icon={<ScrollText className="h-8 w-8 text-muted-foreground" />} title="No log entries" subtitle="" />
-      ) : (
-        <div className="grid gap-2 md:grid-cols-2">
-          {logs.map((l) => (
-            <div key={l.id} className="rounded-xl border border-border bg-card p-3 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono font-semibold text-foreground">{l.action}</span>
-                <span className="text-muted-foreground">{new Date(l.created_at).toLocaleString()}</span>
-              </div>
-              <p className="mt-1 truncate text-muted-foreground">
-                {l.actor_email ?? l.actor_id ?? "system"}
-                {l.entity_type && ` → ${l.entity_type}:${l.entity_id}`}
-              </p>
-              {Object.keys(l.metadata ?? {}).length > 0 && (
-                <pre className="mt-2 overflow-x-auto rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">
-                  {JSON.stringify(l.metadata, null, 2)}
-                </pre>
-              )}
-            </div>
-          ))}
+
+      {/* Documents */}
+      <div>
+        <p className="mb-1 flex items-center gap-1 font-semibold text-foreground">
+          <FileText className="h-3 w-3" /> Submitted documents ({docs.length})
+        </p>
+        {docs.length === 0 ? (
+          <p className="text-muted-foreground">No documents uploaded.</p>
+        ) : (
+          <ul className="space-y-1">
+            {docs.map((d) => (
+              <li key={d.id} className="flex items-center gap-2">
+                <a
+                  href={d.file_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 truncate text-primary"
+                >
+                  {d.label} <ExternalLink className="h-3 w-3" />
+                </a>
+                <span
+                  className={
+                    "rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                    (d.status === "flagged"
+                      ? "bg-destructive/15 text-destructive"
+                      : d.status === "approved"
+                        ? "bg-verified/15 text-verified-foreground"
+                        : "bg-muted text-muted-foreground")
+                  }
+                >
+                  {d.status}
+                </span>
+                <button
+                  onClick={() => flagDoc(d.id)}
+                  className="ml-auto text-[10px] font-semibold text-destructive hover:underline"
+                >
+                  Flag
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* AI review */}
+      <div className="rounded-xl border border-border bg-background p-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-3 w-3 text-primary" />
+          <p className="font-semibold text-foreground">AI fraud-risk review</p>
+          <button
+            onClick={runScrape}
+            disabled={scraping}
+            className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {scraping && <Loader2 className="h-3 w-3 animate-spin" />}
+            {top ? "Re-scrape" : "Run scrape"}
+          </button>
         </div>
-      )}
+        {top ? (
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center gap-2">
+              <span
+                className={
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                  (top.risk_level === "high"
+                    ? "bg-destructive/15 text-destructive"
+                    : top.risk_level === "medium"
+                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                      : top.risk_level === "low"
+                        ? "bg-verified/15 text-verified-foreground"
+                        : "bg-muted text-muted-foreground")
+                }
+              >
+                {top.risk_level} risk
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {new Date(top.created_at).toLocaleString()}
+              </span>
+            </div>
+            {top.summary && <p className="text-foreground">{top.summary}</p>}
+            {top.findings?.length > 0 && (
+              <ul className="ml-4 list-disc space-y-0.5 text-foreground">
+                {top.findings.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            )}
+            {top.sources?.length > 0 && (
+              <div>
+                <p className="mt-2 font-semibold text-muted-foreground">Sources</p>
+                <ul className="space-y-0.5">
+                  {top.sources.slice(0, 8).map((s, i) => (
+                    <li key={i}>
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-primary"
+                      >
+                        {s.org && <span className="rounded bg-muted px-1 text-[9px] font-semibold">{s.org}</span>}
+                        <span className="truncate">{s.title || s.url}</span>
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="mt-2 text-muted-foreground">No AI review yet — run a scrape to begin.</p>
+        )}
+      </div>
+
+      {/* Verified weblinks (admin-curated) */}
+      <div className="rounded-xl border border-border bg-background p-3">
+        <p className="mb-1 font-semibold text-foreground">Verified listing links (public)</p>
+        <p className="mb-2 text-muted-foreground">
+          Replace raw contact details with verified registry pages. These appear instead of the business's number.
+        </p>
+        <LinkInput label="TRA" value={tra} onChange={setTra} />
+        <LinkInput label="KATA" value={kata} onChange={setKata} />
+        <LinkInput label="KATO" value={kato} onChange={setKato} />
+        {canEdit ? (
+          <button
+            onClick={saveLinks}
+            disabled={busy}
+            className="mt-2 inline-flex items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-[11px] font-semibold text-background disabled:opacity-50"
+          >
+            <Save className="h-3 w-3" /> Save links
+          </button>
+        ) : (
+          <p className="text-[10px] italic text-muted-foreground">Super admin only.</p>
+        )}
+      </div>
+
+      {/* Danger flag */}
+      <div className="flex items-center justify-between rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+        <div>
+          <p className="font-semibold text-destructive">Danger / fraud account</p>
+          <p className="text-muted-foreground">Flag fraudulent submissions to warn other users.</p>
+        </div>
+        <button
+          onClick={() => {
+            const r = window.prompt("Reason this account is flagged as dangerous?");
+            if (r) flagDanger(r);
+          }}
+          className="rounded-full bg-destructive px-3 py-1.5 text-[11px] font-semibold text-destructive-foreground"
+        >
+          Flag account
+        </button>
+      </div>
     </div>
   );
 }
 
-/* ------------------------- Layout helpers ------------------------- */
+function LinkInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="mb-1 flex items-center gap-2">
+      <span className="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={`https://${label.toLowerCase()}.example.com/...`}
+        className="flex-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] text-foreground"
+      />
+    </label>
+  );
+}
 
 function Detail({ k, v }: { k: string; v: string }) {
   return (
     <p>
       <span className="text-muted-foreground">{k}:</span> {v}
     </p>
-  );
-}
-
-function Frame({ back, title, children }: { back: () => void; title: string; children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-3">
-          <button onClick={back} aria-label="Back" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-base font-semibold text-foreground">{title}</h1>
-        </div>
-      </header>
-      {children}
-    </div>
-  );
-}
-
-function Empty({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-      {icon}
-      <p className="mt-3 text-sm font-semibold text-foreground">{title}</p>
-      {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
-    </div>
-  );
-}
-
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center py-10">
-      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-    </div>
   );
 }

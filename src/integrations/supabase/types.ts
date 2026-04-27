@@ -159,10 +159,14 @@ export type Database = {
           country: string | null
           facebook: string | null
           instagram: string | null
+          kata_listing_url: string | null
+          kato_listing_url: string | null
           linkedin: string | null
+          other_listing_urls: Json
           profile_id: string
           registration_number: string | null
           tiktok: string | null
+          tra_listing_url: string | null
           twitter: string | null
           updated_at: string
           website: string | null
@@ -178,10 +182,14 @@ export type Database = {
           country?: string | null
           facebook?: string | null
           instagram?: string | null
+          kata_listing_url?: string | null
+          kato_listing_url?: string | null
           linkedin?: string | null
+          other_listing_urls?: Json
           profile_id: string
           registration_number?: string | null
           tiktok?: string | null
+          tra_listing_url?: string | null
           twitter?: string | null
           updated_at?: string
           website?: string | null
@@ -197,10 +205,14 @@ export type Database = {
           country?: string | null
           facebook?: string | null
           instagram?: string | null
+          kata_listing_url?: string | null
+          kato_listing_url?: string | null
           linkedin?: string | null
+          other_listing_urls?: Json
           profile_id?: string
           registration_number?: string | null
           tiktok?: string | null
+          tra_listing_url?: string | null
           twitter?: string | null
           updated_at?: string
           website?: string | null
@@ -277,6 +289,48 @@ export type Database = {
           label?: string
           slug?: string
           sort_order?: number
+        }
+        Relationships: []
+      }
+      content_reports: {
+        Row: {
+          comment_id: string | null
+          created_at: string
+          details: string | null
+          id: string
+          post_id: string | null
+          reason: Database["public"]["Enums"]["report_reason"]
+          reporter_id: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: Database["public"]["Enums"]["report_status"]
+        }
+        Insert: {
+          comment_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          post_id?: string | null
+          reason: Database["public"]["Enums"]["report_reason"]
+          reporter_id: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["report_status"]
+        }
+        Update: {
+          comment_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          post_id?: string | null
+          reason?: Database["public"]["Enums"]["report_reason"]
+          reporter_id?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["report_status"]
         }
         Relationships: []
       }
@@ -624,6 +678,9 @@ export type Database = {
           media_url: string | null
           poster_url: string | null
           quote_post_id: string | null
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
           saves_count: number
           text_background: string | null
           text_foreground: string | null
@@ -645,6 +702,9 @@ export type Database = {
           media_url?: string | null
           poster_url?: string | null
           quote_post_id?: string | null
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
           saves_count?: number
           text_background?: string | null
           text_foreground?: string | null
@@ -666,6 +726,9 @@ export type Database = {
           media_url?: string | null
           poster_url?: string | null
           quote_post_id?: string | null
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
           saves_count?: number
           text_background?: string | null
           text_foreground?: string | null
@@ -873,6 +936,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      verification_ai_reviews: {
+        Row: {
+          created_at: string
+          findings: Json
+          id: string
+          profile_id: string
+          risk_level: string
+          scraped_at: string | null
+          sources: Json
+          summary: string | null
+          triggered_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          findings?: Json
+          id?: string
+          profile_id: string
+          risk_level?: string
+          scraped_at?: string | null
+          sources?: Json
+          summary?: string | null
+          triggered_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          findings?: Json
+          id?: string
+          profile_id?: string
+          risk_level?: string
+          scraped_at?: string | null
+          sources?: Json
+          summary?: string | null
+          triggered_by?: string | null
+        }
+        Relationships: []
       }
       verification_documents: {
         Row: {
@@ -1094,6 +1193,17 @@ export type Database = {
         }
         Returns: string
       }
+      restore_post: { Args: { _post_id: string }; Returns: undefined }
+      save_ai_verification_review: {
+        Args: {
+          _findings: Json
+          _profile_id: string
+          _risk_level: string
+          _sources: Json
+          _summary: string
+        }
+        Returns: string
+      }
       set_user_danger: {
         Args: { _flagged: boolean; _reason?: string; _user: string }
         Returns: undefined
@@ -1101,6 +1211,10 @@ export type Database = {
       start_dm: {
         Args: { _is_inquiry?: boolean; _other: string }
         Returns: string
+      }
+      takedown_post: {
+        Args: { _post_id: string; _reason: string }
+        Returns: undefined
       }
     }
     Enums: {
@@ -1115,6 +1229,18 @@ export type Database = {
         | "repost"
         | "inquiry"
         | "verified"
+        | "report_action"
+      report_reason:
+        | "spam"
+        | "scam_fraud"
+        | "harassment"
+        | "hate"
+        | "nudity_sexual"
+        | "violence"
+        | "misinformation"
+        | "impersonation"
+        | "other"
+      report_status: "open" | "reviewing" | "dismissed" | "actioned"
       verification_status: "unverified" | "pending" | "verified"
     }
     CompositeTypes: {
@@ -1254,7 +1380,20 @@ export const Constants = {
         "repost",
         "inquiry",
         "verified",
+        "report_action",
       ],
+      report_reason: [
+        "spam",
+        "scam_fraud",
+        "harassment",
+        "hate",
+        "nudity_sexual",
+        "violence",
+        "misinformation",
+        "impersonation",
+        "other",
+      ],
+      report_status: ["open", "reviewing", "dismissed", "actioned"],
       verification_status: ["unverified", "pending", "verified"],
     },
   },

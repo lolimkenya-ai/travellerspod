@@ -67,6 +67,15 @@ export function VerifiedBusinessModal({ open, onOpenChange, profileId, displayNa
           </p>
         ) : (
           <div className="space-y-3 pt-2 text-sm">
+            {(details as any).tra_listing_url && (
+              <Row icon={Globe} label="TRA listing" value="View on TRA" href={(details as any).tra_listing_url} external />
+            )}
+            {(details as any).kata_listing_url && (
+              <Row icon={Globe} label="KATA listing" value="View on KATA" href={(details as any).kata_listing_url} external />
+            )}
+            {(details as any).kato_listing_url && (
+              <Row icon={Globe} label="KATO listing" value="View on KATO" href={(details as any).kato_listing_url} external />
+            )}
             <Row icon={Building2} label="Associations" value={details.associations} />
             <Row icon={Hash} label="Registration №" value={details.registration_number} />
             <Row
@@ -80,12 +89,14 @@ export function VerifiedBusinessModal({ open, onOpenChange, profileId, displayNa
               value={details.contact_email}
               href={details.contact_email ? `mailto:${details.contact_email}` : null}
             />
-            <Row
-              icon={Phone}
-              label="Phone"
-              value={details.contact_phone}
-              href={details.contact_phone ? `tel:${details.contact_phone}` : null}
-            />
+            {!((details as any).tra_listing_url || (details as any).kata_listing_url || (details as any).kato_listing_url) && (
+              <Row
+                icon={Phone}
+                label="Phone"
+                value={details.contact_phone}
+                href={details.contact_phone ? `tel:${details.contact_phone}` : null}
+              />
+            )}
             <Row
               icon={Globe}
               label="Website"
