@@ -1,7 +1,8 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Plus, MapPin } from "lucide-react";
+import { Plus, MapPin, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useBoards } from "@/contexts/BoardsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { Post } from "@/data/types";
 
@@ -12,24 +13,48 @@ interface Props {
 }
 
 export function SaveBoardSheet({ open, onOpenChange, post }: Props) {
+  const { user, promptSignUp } = useAuth();
   const { boards, savePostToBoard, createBoard } = useBoards();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [location, setLocation] = useState(post.location);
+  const [busy, setBusy] = useState(false);
 
-  const handleSave = (boardId: string) => {
-    savePostToBoard(boardId, post.id);
-    toast.success("Saved to board");
-    onOpenChange(false);
+  if (!user) {
+    // Defer to sign-up if somehow opened without auth.
+    if (open) {
+      promptSignUp();
+      onOpenChange(false);
+    }
+    return null;
+  }
+
+  const handleSave = async (boardId: string) => {
+    setBusy(true);
+    try {
+      await savePostToBoard(boardId, post.id);
+      toast.success("Saved to board");
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not save");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return;
-    const b = createBoard(name.trim(), location.trim() || post.location, post.id);
-    toast.success(`Created "${b.name}"`);
-    setName("");
-    setCreating(false);
-    onOpenChange(false);
+    setBusy(true);
+    const b = await createBoard(name.trim(), location.trim() || post.location, post.id);
+    setBusy(false);
+    if (b) {
+      toast.success(`Saved to "${b.name}"`);
+      setName("");
+      setCreating(false);
+      onOpenChange(false);
+    } else {
+      toast.error("Could not create board");
+    }
   };
 
   return (
@@ -53,23 +78,31 @@ export function SaveBoardSheet({ open, onOpenChange, post }: Props) {
                   <p className="text-xs text-muted-foreground">Create a board for this trip</p>
                 </div>
               </button>
+              {boards.length === 0 && (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  No boards yet — create one above.
+                </div>
+              )}
               {boards.map((b) => (
                 <button
                   key={b.id}
+                  disabled={busy}
                   onClick={() => handleSave(b.id)}
-                  className="flex items-center gap-3 border-b border-border/50 px-4 py-3 text-left hover:bg-accent"
+                  className="flex items-center gap-3 border-b border-border/50 px-4 py-3 text-left hover:bg-accent disabled:opacity-60"
                 >
-                  <div className="grid h-12 w-12 grid-cols-2 gap-px overflow-hidden rounded-xl bg-muted">
-                    {b.cover.slice(0, 4).map((src, i) => (
-                      <img key={i} src={src} alt="" className="h-full w-full object-cover" />
-                    ))}
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-xs font-semibold text-muted-foreground">
+                    {b.postIds.length}
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-foreground">{b.name}</p>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <MapPin className="h-3 w-3 text-secondary" />
-                      {b.location}
-                      <span aria-hidden>·</span>
+                      {b.location && (
+                        <>
+                          <MapPin className="h-3 w-3 text-secondary" />
+                          {b.location}
+                          <span aria-hidden>·</span>
+                        </>
+                      )}
                       <span>{b.postIds.length} saved</span>
                     </div>
                   </div>
@@ -100,10 +133,10 @@ export function SaveBoardSheet({ open, onOpenChange, post }: Props) {
                 </button>
                 <button
                   onClick={handleCreate}
-                  disabled={!name.trim()}
-                  className="flex-1 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+                  disabled={!name.trim() || busy}
+                  className="flex flex-1 items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-40"
                 >
-                  Create board
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create board"}
                 </button>
               </div>
             </div>
