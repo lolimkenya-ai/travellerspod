@@ -36,10 +36,14 @@ export function useRoles(): Roles {
         .eq("user_id", user.id);
       if (cancelled) return;
       const set = new Set((data ?? []).map((r) => r.role as string));
+      const isSuperAdmin = set.has("super_admin");
+      const isAdmin = set.has("admin") || isSuperAdmin;
+      const isModerator = set.has("moderator") || isAdmin;
+
       setRoles({
-        isSuperAdmin: set.has("super_admin"),
-        isAdmin: set.has("admin") || set.has("super_admin"),
-        isModerator: set.has("moderator") || set.has("admin") || set.has("super_admin"),
+        isSuperAdmin,
+        isAdmin,
+        isModerator,
         loading: false,
       });
     })();

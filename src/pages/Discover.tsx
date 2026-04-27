@@ -1,14 +1,19 @@
 import { Feed } from "@/components/feed/Feed";
-import { POSTS } from "@/data/posts";
 import { useCategoryFilter } from "@/contexts/CategoryContext";
-import { usePosts } from "@/hooks/usePosts";
-import { Loader2 } from "lucide-react";
+import { useFairViewFeed, usePreferenceLearning } from "@/hooks/useAdvancedAI";
+import { Loader2, Sparkles } from "lucide-react";
+import { useEffect } from "react";
 
 export default function Discover() {
   const { active } = useCategoryFilter();
-  const { posts: dbPosts, loading } = usePosts({ scope: "discover", categoryLabel: active });
+  const { posts, loading, loadFeed, distribution } = useFairViewFeed();
+  const { preferences } = usePreferenceLearning();
 
-  if (loading) {
+  useEffect(() => {
+    loadFeed(active === "All" ? undefined : active, preferences);
+  }, [active, loadFeed, preferences]);
+
+  if (loading && posts.length === 0) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -16,19 +21,22 @@ export default function Discover() {
     );
   }
 
-  // Fall back to mocks while the DB is empty so first-time visitors still see
-  // a populated feed. As soon as real posts exist, those take over.
-  let posts = dbPosts;
-  if (posts.length === 0) {
-    const nonBroadcast = POSTS.filter((p) => !p.isBroadcast);
-    posts = active === "All" ? nonBroadcast : nonBroadcast.filter((p) => p.category === active);
-  }
-
   return (
-    <Feed
-      posts={posts}
-      emptyTitle={`No posts in ${active}`}
-      emptyBody="Try a different category or check back soon."
-    />
+    <div className="relative">
+      {distribution.unviewed > 0 && (
+        <div className="sticky top-0 z-20 flex justify-center py-2 pointer-events-none">
+          <div className="flex items-center gap-1.5 rounded-full bg-primary/90 px-3 py-1 text-[10px] font-medium text-primary-foreground shadow-lg backdrop-blur-sm">
+            <Sparkles className="h-3 w-3" />
+            AI Optimized Feed
+          </div>
+        </div>
+      )}
+      
+      <Feed
+        posts={posts}
+        emptyTitle={`No posts in ${active}`}
+        emptyBody="Try a different category or check back soon."
+      />
+    </div>
   );
 }
