@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { Session, User as SupaUser } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-
 import { toast } from "sonner";
 
 export interface AuthProfile {
@@ -61,12 +60,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function loadProfile(userId: string) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, nametag, display_name, avatar_url, account_type, verified")
-      .eq("id", userId)
-      .maybeSingle();
-    if (!error && data) setProfile(data as AuthProfile);
+    try {
+      // First, try to get the existing profile
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, nametag, display_name, avatar_url, account_type, verified")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (data) {
+        setProfile(data as AuthProfile);
+        return;
+      }
+
+      // If no profile exists, create one (handles OAuth sign-ups)
+      if (error?.code === "PGRST116" || !data) {
+        const user = await supabase.auth.getUser();
+        if (user.data?.user) {
+          const email = user.data.user.email || "";
+          const displayName = user.data.user.user_metadata?.full_name || email.split("@")[0];
+          const nametag = email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+
+          const { data: newProfile, error: createError } = await supabase
+            .from("profiles")
+            .insert([
+              {
+                id: userId,
+                nametag: nametag || `user_${userId.slice(0, 8)}`,
+                display_name: displayName,
+                avatar_url: user.data.user.user_metadata?.avatar_url || null,
+                account_type: "personal",
+                verified: false,
+              },
+            ])
+            .select("id, nametag, display_name, avatar_url, account_type, verified")
+            .single();
+
+          if (newProfile) {
+            setProfile(newProfile as AuthProfile);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error loading/creating profile:", err);
+    }
   }
 
   const value: AuthContextValue = {
@@ -125,6 +162,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) {
           toast.error(error.message ?? "Google sign-in failed");
         }
+        // Note: User will be redirected to Google, then back to the app.
+        // The onAuthStateChange listener will handle the session update.
       } catch (err) {
         toast.error("Google sign-in failed. Please try again.");
       }
