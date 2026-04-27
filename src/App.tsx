@@ -31,6 +31,8 @@ import Sessions from "./pages/settings/Sessions";
 import DeleteAccount from "./pages/settings/DeleteAccount";
 import Access from "./pages/Access";
 import AccessCompose from "./pages/AccessCompose";
+import PostDetail from "./pages/PostDetail";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -79,6 +81,8 @@ const App = () => (
                   <Route path="/settings/delete" element={<ProtectedRoute><DeleteAccount /></ProtectedRoute>} />
                   <Route path="/access" element={<ProtectedRoute require="admin"><Access /></ProtectedRoute>} />
                   <Route path="/access/compose" element={<ProtectedRoute require="super_admin"><AccessCompose /></ProtectedRoute>} />
+                  <Route path="/access/reports" element={<ProtectedRoute require="moderator"><Reports /></ProtectedRoute>} />
+                  <Route path="/post/:id" element={<PostDetail />} />
                   <Route path="/admin" element={<Navigate to="/access" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
