@@ -248,7 +248,7 @@ export default function Profile() {
               {following ? "Following" : "Follow"}
             </button>
             <button
-              onClick={() => navigate(`/messages/conv-${profile.id}?to=${profile.id}`)}
+              onClick={() => navigate(`/messages/new?to=${profile.id}`)}
               className="flex-1 rounded-full border border-border py-2 text-sm font-semibold text-foreground hover:bg-accent"
             >
               Message

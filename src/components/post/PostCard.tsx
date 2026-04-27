@@ -19,8 +19,8 @@ export function PostCard({ post }: { post: Post }) {
   const showInquire = author.accountType === "business" && author.verified;
 
   const handleInquire = () => {
-    const conv = `conv-${author.id}`;
-    navigate(`/messages/${conv}?to=${author.id}&postId=${post.id}`);
+    // The thread page resolves/creates the real conversation via the start_dm RPC.
+    navigate(`/messages/new?to=${post.authorId}&postId=${post.id}&inquiry=1`);
   };
 
   // Build a unified gallery: cover + extras (only for image posts).
