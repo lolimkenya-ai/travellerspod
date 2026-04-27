@@ -28,9 +28,9 @@ interface ModerationResult {
 }
 
 async function moderateWithOpenAI(content: string): Promise<ModerationResult> {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) {
-    console.error("OPENAI_API_KEY not configured");
+    console.error("GROQ_API_KEY not configured");
     return {
       flagged: false,
       categories: {
@@ -50,21 +50,33 @@ async function moderateWithOpenAI(content: string): Promise<ModerationResult> {
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/moderations", {
+    // Use Groq LLM for moderation (since Groq doesn't have a dedicated moderations endpoint)
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        input: content.slice(0, 32000), // OpenAI limit
-        model: "text-moderation-latest",
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content: `You are a content moderator. Analyze content for policy violations. Return JSON only: {"flagged":bool, "categories":{"sexual":bool,"hate":bool,"harassment":bool,"self_harm":bool,"sexual_minors":bool,"violence":bool,"violence_graphic":bool}, "category_scores":{}, "confidence":0-1}`,
+          },
+          {
+            role: "user",
+            content: content.slice(0, 8000),
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      console.error("OpenAI moderation error:", response.status, error);
+      console.error("Groq moderation error:", response.status, error);
       return {
         flagged: false,
         categories: {
@@ -84,7 +96,7 @@ async function moderateWithOpenAI(content: string): Promise<ModerationResult> {
     }
 
     const data = await response.json();
-    const result = data.results[0];
+    const result = JSON.parse(data.choices[0].message.content);
 
     if (!result) {
       throw new Error("No moderation result returned");
@@ -157,20 +169,20 @@ async function analyzeSpamPatterns(content: string): Promise<{
   spamScore: number;
   reasons: string[];
 }> {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) {
     return { isSpam: false, spamScore: 0, reasons: [] };
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4-mini",
+        model: "llama-3.3-70b-versatile",
         messages: [
           {
             role: "system",
