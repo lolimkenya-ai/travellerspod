@@ -68,15 +68,13 @@ export default function AccessCompose() {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.from("posts").insert({
-      author_id: officialId,
-      media_type: "text",
-      caption: caption.trim().slice(0, 2000),
-      location: location.trim() || null,
-      category_slug: categorySlug || null,
-      text_background: bg,
-      text_foreground: fg,
-      is_broadcast: broadcast,
+    const { error } = await supabase.rpc("post_as_official", {
+      _caption: caption.trim(),
+      _location: location.trim() || null,
+      _category_slug: categorySlug || null,
+      _text_background: bg,
+      _text_foreground: fg,
+      _is_broadcast: broadcast,
     });
     setBusy(false);
     if (error) toast.error(error.message);

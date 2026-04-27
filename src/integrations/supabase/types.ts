@@ -961,7 +961,69 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      business_details_public: {
+        Row: {
+          associations: string | null
+          category: string | null
+          category_slug: string | null
+          country: string | null
+          facebook: string | null
+          instagram: string | null
+          linkedin: string | null
+          profile_id: string | null
+          tiktok: string | null
+          twitter: string | null
+          updated_at: string | null
+          website: string | null
+          youtube: string | null
+        }
+        Insert: {
+          associations?: string | null
+          category?: string | null
+          category_slug?: string | null
+          country?: string | null
+          facebook?: string | null
+          instagram?: string | null
+          linkedin?: string | null
+          profile_id?: string | null
+          tiktok?: string | null
+          twitter?: string | null
+          updated_at?: string | null
+          website?: string | null
+          youtube?: string | null
+        }
+        Update: {
+          associations?: string | null
+          category?: string | null
+          category_slug?: string | null
+          country?: string | null
+          facebook?: string | null
+          instagram?: string | null
+          linkedin?: string | null
+          profile_id?: string | null
+          tiktok?: string | null
+          twitter?: string | null
+          updated_at?: string | null
+          website?: string | null
+          youtube?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_details_category_slug_fkey"
+            columns: ["category_slug"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["slug"]
+          },
+          {
+            foreignKeyName: "business_details_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       check_rate_limit: {
@@ -980,6 +1042,13 @@ export type Database = {
         Returns: undefined
       }
       gc_rate_limits: { Args: never; Returns: undefined }
+      get_profile_moderation: {
+        Args: { _profile: string }
+        Returns: {
+          danger_reason: string
+          flagged_danger: boolean
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1013,6 +1082,17 @@ export type Database = {
       maybe_grant_super_admin: {
         Args: { _email: string; _user_id: string }
         Returns: undefined
+      }
+      post_as_official: {
+        Args: {
+          _caption: string
+          _category_slug?: string
+          _is_broadcast?: boolean
+          _location?: string
+          _text_background?: string
+          _text_foreground?: string
+        }
+        Returns: string
       }
       set_user_danger: {
         Args: { _flagged: boolean; _reason?: string; _user: string }
