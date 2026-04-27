@@ -1,0 +1,1 @@
+alter view public.business_details_public set (security_invoker = true);
