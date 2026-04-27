@@ -194,6 +194,7 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
            profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, verified, followers_count, following_count, bio ),
            extra_media:post_media ( url, poster_url, media_type, position )`,
         )
+        .is("removed_at", null)
         .order("created_at", { ascending: false })
         .limit(limit);
 

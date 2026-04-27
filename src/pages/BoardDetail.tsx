@@ -139,27 +139,29 @@ export default function BoardDetail() {
         <div className="grid grid-cols-2 gap-px bg-border p-px">
           {posts.map((p) => (
             <div key={p.id} className="group relative aspect-square overflow-hidden bg-muted">
-              {p.media_type === "image" && p.media_url && (
-                <img src={p.media_url} alt={p.caption} className="h-full w-full object-cover" />
-              )}
-              {p.media_type === "video" && (
-                <img
-                  src={p.poster_url ?? ""}
-                  alt={p.caption}
-                  className="h-full w-full object-cover"
-                />
-              )}
-              {p.media_type === "text" && (
-                <div
-                  className="flex h-full w-full items-center justify-center p-3 text-center text-xs font-bold"
-                  style={{
-                    background: p.text_background ?? "#1E293B",
-                    color: p.text_foreground ?? "#F8FAFC",
-                  }}
-                >
-                  <p className="line-clamp-6">{p.caption}</p>
-                </div>
-              )}
+              <Link to={`/post/${p.id}`} className="block h-full w-full" aria-label="Open post">
+                {p.media_type === "image" && p.media_url && (
+                  <img src={p.media_url} alt={p.caption} className="h-full w-full object-cover" />
+                )}
+                {p.media_type === "video" && (
+                  <img
+                    src={p.poster_url ?? ""}
+                    alt={p.caption}
+                    className="h-full w-full object-cover"
+                  />
+                )}
+                {p.media_type === "text" && (
+                  <div
+                    className="flex h-full w-full items-center justify-center p-3 text-center text-xs font-bold"
+                    style={{
+                      background: p.text_background ?? "#1E293B",
+                      color: p.text_foreground ?? "#F8FAFC",
+                    }}
+                  >
+                    <p className="line-clamp-6">{p.caption}</p>
+                  </div>
+                )}
+              </Link>
               {isOwner && (
                 <button
                   onClick={() => remove(p.id)}
