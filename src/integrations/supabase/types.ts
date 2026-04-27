@@ -1009,6 +1009,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      mark_conversation_read: { Args: { _conv: string }; Returns: undefined }
       maybe_grant_super_admin: {
         Args: { _email: string; _user_id: string }
         Returns: undefined
@@ -1016,6 +1017,10 @@ export type Database = {
       set_user_danger: {
         Args: { _flagged: boolean; _reason?: string; _user: string }
         Returns: undefined
+      }
+      start_dm: {
+        Args: { _is_inquiry?: boolean; _other: string }
+        Returns: string
       }
     }
     Enums: {
