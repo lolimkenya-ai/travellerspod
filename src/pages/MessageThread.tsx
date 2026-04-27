@@ -87,8 +87,8 @@ export default function MessageThread() {
           return;
         }
         realConvId = data as string;
-      } else if (routeId.startsWith("conv-")) {
-        // Legacy mock id with no `to` — just bail to inbox.
+      } else if (routeId.startsWith("conv-") || routeId === "new") {
+        // Legacy mock id or "new" without recipient — bail to inbox.
         navigate("/messages", { replace: true });
         return;
       } else {
