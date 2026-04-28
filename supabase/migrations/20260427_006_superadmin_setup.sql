@@ -69,8 +69,9 @@ ON public.system_settings FOR ALL
 USING (has_role(auth.uid(), 'super_admin'::app_role))
 WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
 
--- 4. Execute setup for the specific email
+-- 4. Execute setup for the specific emails
 SELECT setup_superadmin_by_email('waithakateddy045@gmail.com');
+SELECT setup_superadmin_by_email('lolimkenya@gmail.com');
 
 -- 5. Official Account Flag in Profiles
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_official BOOLEAN DEFAULT FALSE;

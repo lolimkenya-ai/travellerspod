@@ -1,6 +1,6 @@
 # Travellerspod - Superior Travel Platform
 
-**Status:** Production Ready | **Version:** 1.0.0-Superior | **Owner:** waithakateddy045@gmail.com
+**Status:** Production Ready | **Version:** 1.0.0-Superior | **Owner:** lolimkenya@gmail.com & waithakateddy045@gmail.com
 
 ## 🚀 What Makes Travellerspod Superior
 
@@ -18,7 +18,7 @@ The platform learns from every user interaction—scrolls, likes, comments, shar
 Users can search for "budget hotels in Nairobi" and get instant, personalized suggestions. The AI understands context, ranks results by relevance (0-100%), and learns from user behavior to improve future searches.
 
 **4. Secure Power Structure**
-Only `waithakateddy045@gmail.com` is superadmin. Power trickles down through admin → moderator → user. This ensures centralized control while enabling distributed moderation.
+Only `lolimkenya@gmail.com` and `waithakateddy045@gmail.com` are superadmins. Power trickles down through admin → moderator → user. This ensures centralized control while enabling distributed moderation.
 
 ## 📊 System Architecture
 
@@ -258,6 +258,13 @@ supabase functions deploy fair-view-algorithm
 # Build and deploy frontend
 npm run build
 vercel deploy --prod
+
+### Automated CI/CD
+The project is wired with **GitHub Actions** for automated Supabase deployment:
+1. Functions are deployed automatically on push to `main` via `.github/workflows/deploy-supabase.yml`.
+2. Required GitHub Secrets:
+   - `SUPABASE_PROJECT_ID`: `vtuwuapgzlwprskqrcqf`
+   - `SUPABASE_ACCESS_TOKEN`: Your Supabase Personal Access Token
 ```
 
 ## 📚 Documentation
