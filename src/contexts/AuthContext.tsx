@@ -75,7 +75,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    let sessionCheckTimeout: ReturnType<typeof setTimeout>;
 
     const checkSession = async () => {
       try {
@@ -154,17 +153,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Safety timeout — never hang on loading
-    sessionCheckTimeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.warn("⏱️ Auth session check timeout — clearing loading state");
-        setLoading(false);
-      }
-    }, 5000);
-
     return () => {
       mounted = false;
-      clearTimeout(sessionCheckTimeout);
       sub.subscription.unsubscribe();
     };
   }, [loadProfile]);
