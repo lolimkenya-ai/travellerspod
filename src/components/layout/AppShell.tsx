@@ -111,9 +111,11 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      <footer className="mx-auto w-full max-w-[480px] py-6 text-center text-xs text-muted-foreground">
-        <a href="/privacy" className="hover:underline">Privacy Policy</a>
-      </footer>
+      {!user && (
+        <footer className="mx-auto w-full max-w-[480px] py-6 text-center text-xs text-muted-foreground">
+          <a href="/privacy" className="hover:underline">Privacy Policy</a>
+        </footer>
+      )}
 
       <CreateSheet open={createOpen} onOpenChange={setCreateOpen} />
       <SignUpSheet />

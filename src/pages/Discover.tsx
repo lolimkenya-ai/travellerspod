@@ -3,8 +3,10 @@ import { useCategoryFilter } from "@/contexts/CategoryContext";
 import { useFairViewFeed, usePreferenceLearning } from "@/hooks/useAdvancedAI";
 import { Loader2, Sparkles } from "lucide-react";
 import { useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Discover() {
+  const { user } = useAuth();
   const { active } = useCategoryFilter();
   const { posts, loading, loadFeed, distribution } = useFairViewFeed();
   const { preferences } = usePreferenceLearning();
@@ -32,9 +34,11 @@ export default function Discover() {
         </div>
       )}
 
-      <div className="px-4 py-2 text-center text-sm text-muted-foreground">
-        SafiriPod helps travelers discover, plan, and share their travel experiences.
-      </div>
+      {!user && (
+        <div className="px-4 py-2 text-center text-sm text-muted-foreground">
+          SafiriPod helps travelers discover, plan, and share their travel experiences.
+        </div>
+      )}
       
       <Feed
         posts={posts}
