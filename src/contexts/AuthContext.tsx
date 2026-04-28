@@ -23,6 +23,7 @@ interface AuthContextValue {
     password: string,
     meta: { display_name: string; account_type: AuthProfile["account_type"] },
   ) => Promise<{ error?: string }>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   showSignUp: boolean;
   promptSignUp: () => void;
@@ -240,6 +241,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error("❌ Unexpected sign-up error:", err);
         return { error: "An unexpected error occurred during sign-up" };
+      }
+    },
+    signInWithGoogle: async () => {
+      try {
+        console.log("🚀 Attempting Google sign-in");
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/`,
+          },
+        });
+        if (error) {
+          console.error("❌ Google sign-in error:", error);
+          toast.error("Failed to sign in with Google.");
+        }
+      } catch (err) {
+        console.error("❌ Unexpected Google sign-in error:", err);
+        toast.error("An unexpected error occurred.");
       }
     },
     signOut: async () => {
