@@ -35,6 +35,7 @@ import PostDetail from "./pages/PostDetail";
 import Reports from "./pages/Reports";
 import ModeratorDashboard from "./pages/ModeratorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -87,6 +88,7 @@ const App = () => (
                   <Route path="/moderator" element={<ProtectedRoute require="moderator"><ModeratorDashboard /></ProtectedRoute>} />
                   <Route path="/superadmin" element={<ProtectedRoute require="super_admin"><SuperadminDashboard /></ProtectedRoute>} />
                   <Route path="/post/:id" element={<PostDetail />} />
+                  <Route path="/privacy" element={<PrivacyPolicy />} />
                   <Route path="/admin" element={<Navigate to="/access" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
