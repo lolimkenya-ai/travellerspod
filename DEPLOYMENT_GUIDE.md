@@ -113,7 +113,7 @@ Create `.env.local`:
 
 ```env
 VITE_SUPABASE_URL=your-supabase-url
-VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-key
 ```
 
 ### Step 4.3: Build Project

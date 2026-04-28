@@ -59,9 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  async function loadProfile(userId: string) {
+  async function loadProfile(userId: string, retryCount = 0) {
     try {
-      // First, try to get the existing profile
       const { data, error } = await supabase
         .from("profiles")
         .select("id, nametag, display_name, avatar_url, account_type, verified")
@@ -70,39 +69,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data) {
         setProfile(data as AuthProfile);
-        return;
-      }
-
-      // If no profile exists, create one (handles OAuth sign-ups)
-      if (error?.code === "PGRST116" || !data) {
-        const user = await supabase.auth.getUser();
-        if (user.data?.user) {
-          const email = user.data.user.email || "";
-          const displayName = user.data.user.user_metadata?.full_name || email.split("@")[0];
-          const nametag = email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
-
-          const { data: newProfile, error: createError } = await supabase
-            .from("profiles")
-            .insert([
-              {
-                id: userId,
-                nametag: nametag || `user_${userId.slice(0, 8)}`,
-                display_name: displayName,
-                avatar_url: user.data.user.user_metadata?.avatar_url || null,
-                account_type: "personal",
-                verified: false,
-              },
-            ])
-            .select("id, nametag, display_name, avatar_url, account_type, verified")
-            .single();
-
-          if (newProfile) {
-            setProfile(newProfile as AuthProfile);
-          }
-        }
+      } else if (retryCount < 3) {
+        // Profile might still be being created by the DB trigger
+        setTimeout(() => loadProfile(userId, retryCount + 1), 500);
       }
     } catch (err) {
-      console.error("Error loading/creating profile:", err);
+      console.error("Error loading profile:", err);
     }
   }
 
