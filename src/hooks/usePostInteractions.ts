@@ -44,33 +44,28 @@ export function usePostLike(postId: string, initialCount: number) {
     }
     if (busy) return;
     setBusy(true);
+
+    const ok = await rateLimit("like", 20, 3600); // 20 likes per hour
+    if (!ok) {
+      setBusy(false);
+      return;
+    }
+
     // Optimistic
     const wasLiked = liked;
     setLiked(!wasLiked);
     setCount((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
 
-    if (wasLiked) {
-      const { error } = await supabase
-        .from("post_likes")
-        .delete()
-        .eq("post_id", postId)
-        .eq("user_id", user.id);
-      if (error) {
-        // Revert
-        setLiked(true);
-        setCount((c) => c + 1);
-        toast.error(error.message);
-      }
+    const { data, error } = await supabase.rpc("toggle_like", { _post_id: postId });
+    
+    if (error) {
+      // Revert
+      setLiked(wasLiked);
+      setCount((c) => Math.max(0, c + (wasLiked ? 1 : -1)));
+      toast.error(error.message);
     } else {
-      const { error } = await supabase
-        .from("post_likes")
-        .insert({ post_id: postId, user_id: user.id });
-      if (error) {
-        setLiked(false);
-        setCount((c) => Math.max(0, c - 1));
-        // Ignore duplicate-key races silently.
-        if (!/duplicate/i.test(error.message)) toast.error(error.message);
-      }
+      // Ensure sync with server return value
+      if (data !== undefined) setLiked(!!data);
     }
     setBusy(false);
   }, [busy, liked, postId, promptSignUp, user]);

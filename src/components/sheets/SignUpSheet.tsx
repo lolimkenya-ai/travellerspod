@@ -1,4 +1,4 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { Mail, Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -68,6 +68,9 @@ export function SignUpSheet() {
       <SheetContent side="bottom" className="h-auto rounded-t-2xl border-border bg-card p-0">
         <SheetHeader className="border-b border-border px-4 py-3 text-left">
           <SheetTitle>{mode === "signin" ? "Sign in to Safiripod" : "Join Safiripod"}</SheetTitle>
+          <SheetDescription className="sr-only">
+            Create an account or sign in to access all features.
+          </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-4 p-5">

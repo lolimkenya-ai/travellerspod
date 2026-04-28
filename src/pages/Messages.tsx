@@ -16,7 +16,7 @@ interface ConvRow {
     nametag: string;
     display_name: string;
     avatar_url: string | null;
-    verified: boolean;
+    is_verified: boolean;
   } | null;
 }
 
@@ -63,7 +63,7 @@ export default function Messages() {
     const { data: profs } = otherIds.length
       ? await supabase
           .from("profiles")
-          .select("id, nametag, display_name, avatar_url, verified")
+          .select("id, nametag, display_name, avatar_url, is_verified")
           .in("id", otherIds)
       : { data: [] as any[] };
     const profById = new Map((profs ?? []).map((p: any) => [p.id, p]));
@@ -160,7 +160,7 @@ export default function Messages() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   <p className="truncate text-sm font-semibold text-foreground">{otherName}</p>
-                  {c.other?.verified && (
+                  {c.other?.is_verified && (
                     <BadgeCheck className="h-4 w-4 fill-verified text-verified-foreground" />
                   )}
                   {c.is_inquiry && (

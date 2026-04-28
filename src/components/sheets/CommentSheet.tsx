@@ -1,4 +1,4 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Heart, MessageCircle, Send, Loader2 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,11 +18,9 @@ interface Props {
 interface DbComment {
   id: string;
   post_id: string;
-  author_id: string;
-  body: string;
+  user_id: string;
+  content: string;
   created_at: string;
-  likes_count: number;
-  parent_id: string | null;
   author: {
     nametag: string;
     display_name: string;
@@ -41,10 +39,10 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
   const refresh = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("post_comments")
+      .from("comments")
       .select(
-        `id, post_id, author_id, body, created_at, likes_count, parent_id,
-         author:profiles!post_comments_author_id_fkey ( nametag, display_name, avatar_url )`,
+        `id, post_id, user_id, content, created_at,
+         author:profiles!comments_user_id_fkey ( nametag, display_name, avatar_url )`,
       )
       .eq("post_id", post.id)
       .order("created_at", { ascending: false })
@@ -61,7 +59,7 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
       .channel(`comments:${post.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "post_comments", filter: `post_id=eq.${post.id}` },
+        { event: "*", schema: "public", table: "comments", filter: `post_id=eq.${post.id}` },
         () => refresh(),
       )
       .subscribe();
@@ -77,15 +75,15 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
       if (!user) return;
       if (!clientCooldown(`comment-${post.id}`, 600)) return;
       setPosting(true);
-      const ok = await rateLimit("comment", 20, 60);
+      const ok = await rateLimit("comment", 20, 3600); // 20 comments per hour
       if (!ok) {
         setPosting(false);
         return;
       }
-      const { error } = await supabase.from("post_comments").insert({
+      const { error } = await supabase.from("comments").insert({
         post_id: post.id,
-        author_id: user.id,
-        body,
+        user_id: user.id,
+        content: body,
       });
       setPosting(false);
       if (error) {
@@ -101,6 +99,9 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
       <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl border-border bg-card p-0">
         <SheetHeader className="border-b border-border px-4 py-3 text-left">
           <SheetTitle className="text-base">{formatCount(comments.length)} comments</SheetTitle>
+          <SheetDescription className="sr-only">
+            Join the conversation and share your thoughts.
+          </SheetDescription>
         </SheetHeader>
         <div className="flex h-[calc(85vh-58px-72px)] flex-col overflow-y-auto">
           {loading && (
@@ -153,7 +154,7 @@ function CommentRow({ comment }: { comment: DbComment }) {
 
   const avatar =
     comment.author?.avatar_url ??
-    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(comment.author?.display_name ?? comment.author_id)}`;
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(comment.author?.display_name ?? comment.user_id)}`;
 
   return (
     <div className="border-b border-border/50">
@@ -164,7 +165,7 @@ function CommentRow({ comment }: { comment: DbComment }) {
             <span className="font-semibold text-foreground">@{comment.author?.nametag ?? "user"}</span>
             <span>{timeAgo(comment.created_at)}</span>
           </div>
-          <p className="mt-1 whitespace-pre-line text-sm text-foreground">{comment.body}</p>
+          <p className="mt-1 whitespace-pre-line text-sm text-foreground">{comment.content}</p>
 
           <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
             <button
@@ -172,7 +173,7 @@ function CommentRow({ comment }: { comment: DbComment }) {
               className={cn("flex items-center gap-1", liked && "text-primary")}
             >
               <Heart className={cn("h-3.5 w-3.5", liked && "fill-primary")} />
-              {formatCount(comment.likes_count + (liked ? 1 : 0))}
+              {/* Like count removed for comments as it's not yet in the DB schema for simplicity */}
             </button>
             <button className="flex items-center gap-1 hover:text-foreground">
               <MessageCircle className="h-3.5 w-3.5" />

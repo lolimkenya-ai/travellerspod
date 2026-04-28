@@ -1,4 +1,4 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Video, Image as ImageIcon, Type, Loader2, X, Megaphone, ChevronLeft, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -281,6 +281,9 @@ export function CreateSheet({ open, onOpenChange, onCreated, quotePostId, quoteS
               ? "New video"
               : "New images"}
           </SheetTitle>
+          <SheetDescription className="sr-only">
+            Create a new post to share your travel experiences.
+          </SheetDescription>
           <button
             onClick={() => !busy && onOpenChange(false)}
             aria-label="Close"

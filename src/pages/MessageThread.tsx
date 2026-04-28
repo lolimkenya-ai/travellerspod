@@ -20,7 +20,7 @@ interface OtherProfile {
   nametag: string;
   display_name: string;
   avatar_url: string | null;
-  verified: boolean;
+  is_verified: boolean;
 }
 
 /**
@@ -109,7 +109,7 @@ export default function MessageThread() {
       if (otherId) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("id, nametag, display_name, avatar_url, verified")
+          .select("id, nametag, display_name, avatar_url, is_verified")
           .eq("id", otherId)
           .maybeSingle();
         if (!cancelled) setOther((prof as OtherProfile) ?? null);
@@ -225,7 +225,7 @@ export default function MessageThread() {
             <div className="flex-1">
               <div className="flex items-center gap-1">
                 <p className="text-sm font-semibold text-foreground">{other.display_name}</p>
-                {other.verified && (
+                {other.is_verified && (
                   <BadgeCheck className="h-4 w-4 fill-verified text-verified-foreground" />
                 )}
               </div>

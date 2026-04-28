@@ -26,12 +26,11 @@ async function sqlSearch(query: string): Promise<SearchResult[]> {
   const q = query.trim();
   const results: SearchResult[] = [];
 
-  // Search profiles (users & businesses)
+  // Search profiles (users & businesses) - using trigram similarity for display_name and nametag
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, nametag, display_name, avatar_url, verified, account_type, bio")
+    .select("id, nametag, display_name, avatar_url, is_verified, account_type, bio")
     .or(`display_name.ilike.%${q}%,nametag.ilike.%${q}%,bio.ilike.%${q}%`)
-    .eq("flagged_danger", false)
     .limit(12);
 
   for (const p of profiles ?? []) {
@@ -40,28 +39,40 @@ async function sqlSearch(query: string): Promise<SearchResult[]> {
       type: p.account_type === "business" ? "business" : "user",
       title: p.display_name,
       description: `@${p.nametag}${p.bio ? " · " + p.bio.slice(0, 60) : ""}`,
-      relevanceScore: p.verified ? 95 : 80,
+      relevanceScore: (p as any).is_verified ? 95 : 80,
       matchedFields: ["display_name"],
       userPreferenceMatch: 0,
       metadata: {
         avatar_url: p.avatar_url,
-        verified: p.verified,
+        verified: (p as any).is_verified,
         nametag: p.nametag,
         account_type: p.account_type,
       },
     });
   }
 
-  // Search posts
+  // Search posts - using full-text search with tsvector
   const { data: posts } = await supabase
     .from("posts")
-    .select("id, caption, media_url, poster_url, location, author_id")
-    .ilike("caption", `%${q}%`)
+    .select("id, caption, media_url, poster_url, location, author_id, likes_count")
+    .textSearch("search_vector", q.split(" ").join(" & "))
     .is("removed_at", null)
     .order("likes_count", { ascending: false })
     .limit(15);
 
-  for (const p of posts ?? []) {
+  // Fallback to ilike if textSearch yields nothing (common for short queries)
+  let finalPosts = posts ?? [];
+  if (finalPosts.length === 0) {
+    const { data: ilikePosts } = await supabase
+      .from("posts")
+      .select("id, caption, media_url, poster_url, location, author_id, likes_count")
+      .ilike("caption", `%${q}%`)
+      .is("removed_at", null)
+      .limit(15);
+    finalPosts = ilikePosts ?? [];
+  }
+
+  for (const p of finalPosts) {
     results.push({
       id: p.id,
       type: "post",

@@ -22,7 +22,7 @@ interface MiniProfile {
   nametag: string;
   display_name: string;
   avatar_url: string | null;
-  verified: boolean;
+  is_verified: boolean;
 }
 
 interface BoardRow {
@@ -70,7 +70,7 @@ export default function Profile() {
           .from("follows")
           .select("follower_id")
           .eq("follower_id", user.id)
-          .eq("followee_id", p.id)
+          .eq("following_id", p.id)
           .maybeSingle();
         if (!cancelled) setFollowing(!!f);
       } else {
@@ -104,7 +104,7 @@ export default function Profile() {
           .from("follows")
           .delete()
           .eq("follower_id", user.id)
-          .eq("followee_id", profile.id);
+          .eq("following_id", profile.id);
         if (error) toast.error(error.message);
         else {
           setFollowing(false);
@@ -113,7 +113,7 @@ export default function Profile() {
       } else {
         const { error } = await supabase
           .from("follows")
-          .insert({ follower_id: user.id, followee_id: profile.id });
+          .insert({ follower_id: user.id, following_id: profile.id });
         if (error) toast.error(error.message);
         else {
           setFollowing(true);
@@ -188,7 +188,7 @@ export default function Profile() {
           <div className="flex-1 pt-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-bold text-foreground">{profile.display_name}</h2>
-              {profile.verified && isBusiness && (
+              {profile.is_verified && isBusiness && (
                 <button
                   onClick={() => setBizOpen(true)}
                   className="inline-flex items-center gap-1 rounded-full bg-verified/15 px-2 py-0.5 text-xs font-semibold text-verified-foreground transition-colors hover:bg-verified/25"
@@ -352,7 +352,7 @@ function BoardsGrid({ ownerId, isMe }: { ownerId: string; isMe: boolean }) {
           .from("board_posts")
           .select("board_id, post_id, posts!inner ( poster_url, media_url )")
           .in("board_id", ids)
-          .order("added_at", { ascending: false });
+          .order("created_at", { ascending: false });
         for (const row of (bp ?? []) as Array<{
           board_id: string;
           post_id: string;
@@ -448,9 +448,9 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
       // Use explicit FK aliases so PostgREST embeds the right side.
       const select =
         kind === "followers"
-          ? "follower:profiles!follows_follower_id_fkey(id, nametag, display_name, avatar_url, verified)"
-          : "followee:profiles!follows_followee_id_fkey(id, nametag, display_name, avatar_url, verified)";
-      const filter = kind === "followers" ? "followee_id" : "follower_id";
+          ? "follower:profiles!follows_follower_id_fkey(id, nametag, display_name, avatar_url, is_verified)"
+          : "following:profiles!follows_following_id_fkey(id, nametag, display_name, avatar_url, is_verified)";
+      const filter = kind === "followers" ? "following_id" : "follower_id";
 
       const { data, error } = await supabase
         .from("follows")
@@ -461,13 +461,13 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
       if (cancelled) return;
       if (error) {
         // Fallback if FK alias names differ — fetch ids then resolve profiles.
-        const idCol = kind === "followers" ? "follower_id" : "followee_id";
+        const idCol = kind === "followers" ? "follower_id" : "following_id";
         const { data: rows } = await supabase.from("follows").select(idCol).eq(filter, profileId).limit(200);
         const ids = (rows ?? []).map((r: any) => r[idCol]).filter(Boolean);
         if (ids.length) {
           const { data: profs } = await supabase
             .from("profiles")
-            .select("id, nametag, display_name, avatar_url, verified")
+            .select("id, nametag, display_name, avatar_url, is_verified")
             .in("id", ids);
           setList((profs ?? []) as MiniProfile[]);
         } else {
@@ -475,7 +475,7 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
         }
       } else {
         const out: MiniProfile[] = (data ?? [])
-          .map((r: any) => (kind === "followers" ? r.follower : r.followee))
+          .map((r: any) => (kind === "followers" ? r.follower : r.following))
           .filter(Boolean);
         setList(out);
       }
@@ -484,9 +484,9 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
       if (user) {
         const { data: my } = await supabase
           .from("follows")
-          .select("followee_id")
+          .select("following_id")
           .eq("follower_id", user.id);
-        if (!cancelled) setFollowingSet(new Set((my ?? []).map((r) => r.followee_id)));
+        if (!cancelled) setFollowingSet(new Set((my ?? []).map((r) => r.following_id)));
       }
     })();
     return () => {
@@ -509,7 +509,7 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
         .from("follows")
         .delete()
         .eq("follower_id", user.id)
-        .eq("followee_id", id);
+        .eq("following_id", id);
       if (error) {
         next.add(id);
         setFollowingSet(new Set(next));
@@ -518,7 +518,7 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
     } else {
       next.add(id);
       setFollowingSet(next);
-      const { error } = await supabase.from("follows").insert({ follower_id: user.id, followee_id: id });
+      const { error } = await supabase.from("follows").insert({ follower_id: user.id, following_id: id });
       if (error) {
         next.delete(id);
         setFollowingSet(new Set(next));
@@ -550,7 +550,7 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
               <div className="min-w-0">
                 <p className="flex items-center gap-1 truncate text-sm font-semibold text-foreground">
                   {p.display_name}
-                  {p.verified && <BadgeCheck className="h-3.5 w-3.5 fill-verified text-verified-foreground" />}
+                  {p.is_verified && <BadgeCheck className="h-3.5 w-3.5 fill-verified text-verified-foreground" />}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">@{p.nametag}</p>
               </div>

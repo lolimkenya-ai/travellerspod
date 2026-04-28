@@ -1,4 +1,4 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Plus, MapPin, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useBoards } from "@/contexts/BoardsContext";
@@ -62,6 +62,9 @@ export function SaveBoardSheet({ open, onOpenChange, post }: Props) {
       <SheetContent side="bottom" className="h-[70vh] rounded-t-2xl border-border bg-card p-0">
         <SheetHeader className="border-b border-border px-4 py-3 text-left">
           <SheetTitle>Save to Trip Board</SheetTitle>
+          <SheetDescription className="sr-only">
+            Organize your travels by saving posts to boards.
+          </SheetDescription>
         </SheetHeader>
         <div className="flex h-[calc(70vh-58px)] flex-col overflow-y-auto">
           {!creating ? (

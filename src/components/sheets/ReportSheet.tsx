@@ -51,11 +51,10 @@ export function ReportSheet({ open, onOpenChange, postId }: Props) {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from("content_reports").insert({
-      reporter_id: user.id,
-      post_id: postId,
-      reason: reason as any,
-      details: details.trim() || null,
+    const { error } = await supabase.rpc("report_content", {
+      _content_id: postId,
+      _content_type: "post",
+      _reason: reason,
     });
     setSubmitting(false);
     if (error) {

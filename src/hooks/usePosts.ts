@@ -29,7 +29,7 @@ interface PostRow {
     display_name: string;
     avatar_url: string | null;
     account_type: "personal" | "business" | "organization";
-    verified: boolean;
+    is_verified: boolean;
     followers_count: number;
     following_count: number;
     bio: string | null;
@@ -69,7 +69,7 @@ function rowToPost(row: PostRow, quotesById: Map<string, QuoteRow>): Post {
       bio: row.profile.bio ?? undefined,
       accountType:
         row.profile.account_type === "personal" ? "normal" : (row.profile.account_type as "business" | "organization"),
-      verified: row.profile.verified,
+      verified: row.profile.is_verified,
       followers: row.profile.followers_count,
       following: row.profile.following_count,
     });
@@ -160,9 +160,9 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
         }
         const { data: f } = await supabase
           .from("follows")
-          .select("followee_id")
+          .select("following_id")
           .eq("follower_id", me);
-        followingIds = (f ?? []).map((r) => r.followee_id);
+        followingIds = (f ?? []).map((r) => r.following_id);
         if (followingIds.length === 0) {
           if (!cancelled) {
             setPosts([]);
@@ -191,7 +191,7 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
           `id, author_id, media_type, media_url, poster_url, text_background, text_foreground,
            caption, location, category_slug, is_broadcast, is_ad, quote_post_id, media_count,
            likes_count, comments_count, saves_count, created_at,
-           profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, verified, followers_count, following_count, bio ),
+           profile:profiles!posts_author_id_fkey ( id, nametag, display_name, avatar_url, account_type, is_verified, followers_count, following_count, bio ),
            extra_media:post_media ( url, poster_url, media_type, position )`,
         )
         .is("removed_at", null)

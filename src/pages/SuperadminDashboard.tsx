@@ -60,7 +60,7 @@ interface ManagedUser {
   nametag: string;
   display_name: string;
   avatar_url: string | null;
-  verified: boolean;
+  is_verified: boolean;
   account_type: string;
   flagged_danger: boolean;
   created_at: string;
@@ -125,7 +125,7 @@ export default function SuperadminDashboard() {
     try {
       let query = supabase
         .from("profiles")
-        .select("id, nametag, display_name, avatar_url, verified, account_type, flagged_danger, created_at")
+        .select("id, nametag, display_name, avatar_url, is_verified, account_type, flagged_danger, created_at")
         .order("created_at", { ascending: false })
         .limit(40);
 
@@ -608,7 +608,7 @@ function UserManagementRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="text-sm font-semibold text-foreground">{user.display_name}</p>
-            {user.verified && <CheckCircle className="h-3.5 w-3.5 text-primary" />}
+            {user.is_verified && <CheckCircle className="h-3.5 w-3.5 text-primary" />}
             {user.flagged_danger && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
           </div>
           <p className="text-xs text-muted-foreground">@{user.nametag}</p>
