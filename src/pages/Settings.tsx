@@ -17,11 +17,20 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useRoles } from "@/hooks/useRoles";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 
 export default function Settings() {
   const navigate = useNavigate();
   const { user, profile, loading, signOut } = useAuth();
   const { isAdmin } = useRoles();
+
+  // Ensure we wait for auth state to load
+  useEffect(() => {
+    if (!loading && !user) {
+      // Auth loaded but user not signed in - redirect to home
+      navigate("/");
+    }
+  }, [loading, user, navigate]);
 
   if (loading) {
     return (
