@@ -84,10 +84,17 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  IF NOT has_role(auth.uid(), 'super_admin'::app_role) THEN
-    RAISE EXCEPTION 'Only Superadmins can manage user roles.';
+  -- Allow if the caller is a super_admin
+  IF has_role(auth.uid(), 'super_admin'::app_role) THEN
+    RETURN NEW;
   END IF;
-  RETURN NEW;
+
+  -- Allow if there is no authenticated user (e.g., system triggers during signup)
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION 'Only Superadmins can manage user roles.';
 END;
 $$;
 
