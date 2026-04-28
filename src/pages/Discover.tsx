@@ -31,6 +31,10 @@ export default function Discover() {
           </div>
         </div>
       )}
+
+      <div className="px-4 py-2 text-center text-sm text-muted-foreground">
+        SafiriPod helps travelers discover, plan, and share their travel experiences.
+      </div>
       
       <Feed
         posts={posts}
