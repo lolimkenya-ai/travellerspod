@@ -36,7 +36,7 @@ interface BoardRow {
 export default function Profile() {
   const { nametag = "" } = useParams();
   const navigate = useNavigate();
-  const { user, profile: meProfile } = useAuth();
+  const { user, profile: meProfile, loading: authLoading } = useAuth();
   const requireAuth = useRequireAuth();
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -49,7 +49,10 @@ export default function Profile() {
 
   const isMe = !!meProfile && meProfile.nametag === nametag;
 
+  // Wait for auth to load before fetching profile
   useEffect(() => {
+    if (authLoading) return;
+
     let cancelled = false;
     setLoading(true);
     (async () => {
@@ -77,7 +80,7 @@ export default function Profile() {
     return () => {
       cancelled = true;
     };
-  }, [nametag, user]);
+  }, [nametag, user, authLoading]);
 
   const { posts: authorPosts, loading: postsLoading } = usePosts({
     scope: "author",
@@ -121,7 +124,7 @@ export default function Profile() {
     });
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
