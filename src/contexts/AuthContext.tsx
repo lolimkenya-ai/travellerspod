@@ -38,25 +38,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [showSignUp, setShowSignUp] = useState(false);
 
   useEffect(() => {
-    // 1. Subscribe FIRST to avoid missing events
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    let mounted = true;
+
+    // 1. Check existing session immediately
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (mounted) {
+          setUser(session?.user ?? null);
+          if (session?.user) {
+            loadProfile(session.user.id);
+          }
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Session check error:", err);
+        if (mounted) setLoading(false);
+      }
+    };
+
+    checkSession();
+
+    // 2. Subscribe to auth changes
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
+      console.log("Auth event:", event);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        // Defer DB call to avoid deadlocks inside the callback
-        setTimeout(() => loadProfile(session.user.id), 0);
+        loadProfile(session.user.id);
       } else {
         setProfile(null);
       }
+      
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        setLoading(false);
+      }
     });
 
-    // 2. Then check existing session
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-      if (data.session?.user) loadProfile(data.session.user.id);
-      setLoading(false);
-    });
-
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   async function loadProfile(userId: string, retryCount = 0) {
