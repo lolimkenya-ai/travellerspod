@@ -43,17 +43,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 1. Check existing session immediately
     const checkSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
         if (mounted) {
-          setUser(session?.user ?? null);
           if (session?.user) {
+            setUser(session.user);
             loadProfile(session.user.id);
+          } else {
+            setUser(null);
+            setProfile(null);
           }
           setLoading(false);
         }
       } catch (err) {
         console.error("Session check error:", err);
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+        }
       }
     };
 
@@ -64,15 +73,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       
       console.log("Auth event:", event);
-      setUser(session?.user ?? null);
       
-      if (session?.user) {
-        loadProfile(session.user.id);
-      } else {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
         setProfile(null);
-      }
-      
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        setLoading(false);
+      } else if (session?.user) {
+        setUser(session.user);
+        loadProfile(session.user.id);
+        setLoading(false);
+      } else {
+        setUser(null);
+        setProfile(null);
         setLoading(false);
       }
     });
