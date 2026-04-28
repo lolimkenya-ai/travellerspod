@@ -212,11 +212,11 @@ export default function Profile() {
 
         <div className="mt-4 flex items-center gap-5 text-sm">
           <button onClick={() => setFollowSheet("followers")} className="hover:underline">
-            <span className="font-semibold text-foreground">{formatCount(profile.followers_count)}</span>{" "}
+            <span className="font-semibold text-foreground">{formatCount(profile.followers_count ?? 0)}</span>{" "}
             <span className="text-muted-foreground">followers</span>
           </button>
           <button onClick={() => setFollowSheet("following")} className="hover:underline">
-            <span className="font-semibold text-foreground">{formatCount(profile.following_count)}</span>{" "}
+            <span className="font-semibold text-foreground">{formatCount(profile.following_count ?? 0)}</span>{" "}
             <span className="text-muted-foreground">following</span>
           </button>
         </div>
