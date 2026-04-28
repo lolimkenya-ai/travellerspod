@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import type { Session, User as SupaUser } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ interface AuthContextValue {
   user: SupaUser | null;
   profile: AuthProfile | null;
   loading: boolean;
+  refreshProfile: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
   signUpWithEmail: (
     email: string,
@@ -36,28 +37,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [showSignUp, setShowSignUp] = useState(false);
 
+  const loadProfile = useCallback(async (userId: string, retryCount = 0) => {
+    try {
+      console.log("📋 Loading profile for user:", userId);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, nametag, display_name, avatar_url, account_type, verified")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("❌ Error loading profile:", error);
+        throw error;
+      }
+
+      if (data) {
+        console.log("✅ Profile loaded successfully");
+        setProfile(data as AuthProfile);
+      } else if (retryCount < 3) {
+        // Profile might still be created by the DB trigger — retry
+        console.log(`⏳ Profile not found, retrying (${retryCount + 1}/3)...`);
+        setTimeout(() => loadProfile(userId, retryCount + 1), 600);
+      } else {
+        console.warn("⚠️ Profile not found after retries");
+        setProfile(null);
+      }
+    } catch (err) {
+      console.error("❌ Error loading profile:", err);
+      if (retryCount < 3) {
+        console.log(`⏳ Retrying profile load (${retryCount + 1}/3)...`);
+        setTimeout(() => loadProfile(userId, retryCount + 1), 600);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-    let sessionCheckTimeout: NodeJS.Timeout;
+    let sessionCheckTimeout: ReturnType<typeof setTimeout>;
 
-    // 1. Check existing session immediately
     const checkSession = async () => {
       try {
         console.log("🔍 Checking existing session...");
-        
-        // First, try to get the current session
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
         if (error) {
           console.error("❌ Session check error:", error);
           throw error;
         }
-        
+
         if (mounted) {
           if (session?.user) {
             console.log("✅ Session found for user:", session.user.id);
             setUser(session.user);
-            loadProfile(session.user.id);
+            await loadProfile(session.user.id);
           } else {
             console.log("ℹ️ No existing session found");
             setUser(null);
@@ -77,38 +110,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     checkSession();
 
-    // 2. Subscribe to auth changes
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      
+
       console.log("🔔 Auth event:", event, "Session:", session?.user?.id);
-      
-      if (event === 'SIGNED_OUT') {
+
+      if (event === "SIGNED_OUT") {
         console.log("👋 User signed out");
         setUser(null);
         setProfile(null);
         setLoading(false);
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      } else if (
+        event === "SIGNED_IN" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "USER_UPDATED"
+      ) {
         if (session?.user) {
           console.log("✅ User signed in/updated:", session.user.id);
           setUser(session.user);
           loadProfile(session.user.id);
           setLoading(false);
         }
-      } else if (event === 'INITIAL_SESSION') {
+      } else if (event === "INITIAL_SESSION") {
         console.log("🔄 Initial session check complete");
         if (session?.user) {
-          console.log("✅ Initial session found:", session.user.id);
           setUser(session.user);
           loadProfile(session.user.id);
         } else {
-          console.log("ℹ️ No initial session");
           setUser(null);
           setProfile(null);
         }
         setLoading(false);
       } else {
-        console.log("ℹ️ Auth event:", event);
         if (session?.user) {
           setUser(session.user);
           loadProfile(session.user.id);
@@ -120,10 +153,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Set a timeout to ensure loading state is cleared after 5 seconds
+    // Safety timeout — never hang on loading
     sessionCheckTimeout = setTimeout(() => {
       if (mounted && loading) {
-        console.warn("⏱️ Session check timeout - clearing loading state");
+        console.warn("⏱️ Auth session check timeout — clearing loading state");
         setLoading(false);
       }
     }, 5000);
@@ -133,61 +166,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(sessionCheckTimeout);
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [loadProfile]);
 
-  async function loadProfile(userId: string, retryCount = 0) {
-    try {
-      console.log("📋 Loading profile for user:", userId);
-      
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, nametag, display_name, avatar_url, account_type, verified")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("❌ Error loading profile:", error);
-        throw error;
-      }
-
-      if (data) {
-        console.log("✅ Profile loaded successfully");
-        setProfile(data as AuthProfile);
-      } else if (retryCount < 3) {
-        // Profile might still be being created by the DB trigger
-        console.log(`⏳ Profile not found, retrying (${retryCount + 1}/3)...`);
-        setTimeout(() => loadProfile(userId, retryCount + 1), 500);
-      } else {
-        console.warn("⚠️ Profile not found after retries");
-        setProfile(null);
-      }
-    } catch (err) {
-      console.error("❌ Error loading profile:", err);
-      if (retryCount < 3) {
-        console.log(`⏳ Retrying profile load (${retryCount + 1}/3)...`);
-        setTimeout(() => loadProfile(userId, retryCount + 1), 500);
-      }
-    }
-  }
+  /** Force-refresh the profile from the DB (useful after edits). */
+  const refreshProfile = useCallback(async () => {
+    if (!user) return;
+    await loadProfile(user.id);
+  }, [user, loadProfile]);
 
   const value: AuthContextValue = {
     user,
     profile,
     loading,
+    refreshProfile,
     showSignUp,
     promptSignUp: () => setShowSignUp(true),
     closeSignUp: () => setShowSignUp(false),
     signInWithEmail: async (email, password) => {
       try {
         console.log("🔐 Attempting email sign-in for:", email);
-        
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        
         if (error) {
           console.error("❌ Sign-in error:", error);
           return { error: error.message };
         }
-        
         console.log("✅ Sign-in successful");
         setShowSignUp(false);
         toast.success("Welcome back");
@@ -200,7 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signUpWithEmail: async (email, password, meta) => {
       try {
         console.log("📝 Attempting email sign-up for:", email);
-        
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -209,17 +210,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             data: meta,
           },
         });
-        
+
         if (error) {
           console.error("❌ Sign-up error:", error);
-          
           const msg = error.message.toLowerCase();
-          if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
-            console.log("ℹ️ Email already exists, attempting sign-in");
-            // Try to sign them in directly with the password they typed
+          if (
+            msg.includes("already") ||
+            msg.includes("registered") ||
+            msg.includes("exists")
+          ) {
             const signin = await supabase.auth.signInWithPassword({ email, password });
             if (!signin.error) {
-              console.log("✅ Sign-in successful for existing account");
               setShowSignUp(false);
               toast.success("Welcome back — you already had an account.");
               return {};
@@ -228,14 +229,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return { error: error.message };
         }
-        
-        // If session is null, auto-confirm is off and user must click email link
+
         if (!data.session) {
-          console.log("ℹ️ Email confirmation required");
           return { error: "Check your email to confirm your account, then sign in." };
         }
-        
-        console.log("✅ Sign-up successful");
+
         setShowSignUp(false);
         toast.success("Welcome to Safiripod ✈️");
         return {};
@@ -247,10 +245,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut: async () => {
       try {
         console.log("👋 Signing out user");
-        
         await supabase.auth.signOut();
+        setUser(null);
         setProfile(null);
-        
         console.log("✅ Sign-out successful");
       } catch (err) {
         console.error("❌ Sign-out error:", err);

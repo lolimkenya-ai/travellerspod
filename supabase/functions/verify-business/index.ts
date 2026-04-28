@@ -62,14 +62,26 @@ async function aiAssess(payload: {
   sources: Source[];
   excerpts: { url: string; text: string }[];
 }): Promise<{ summary: string; risk_level: "low" | "medium" | "high" | "unknown"; findings: string[] }> {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  // Support OpenAI key or Gemini key (both speak OpenAI-compatible API)
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  const apiKey = openaiKey || geminiKey;
+
   if (!apiKey) {
     return {
-      summary: "AI key not configured. Manual review required.",
+      summary: "AI key not configured. Set OPENAI_API_KEY or GEMINI_API_KEY in Supabase Edge Function secrets.",
       risk_level: "unknown",
-      findings: [],
+      findings: ["Manual review required — no AI key configured."],
     };
   }
+
+  // Choose endpoint + model based on which key is available
+  const useGemini = !openaiKey && !!geminiKey;
+  const endpoint = useGemini
+    ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    : "https://api.openai.com/v1/chat/completions";
+  const model = useGemini ? "gemini-2.0-flash" : "gpt-4o-mini";
+
   const system =
     "You are a fraud-risk analyst for a Kenyan travel marketplace (Safiripod). " +
     "Given a business's submitted details and excerpts scraped from official tourism " +
@@ -103,11 +115,11 @@ async function aiAssess(payload: {
 
   const user = JSON.stringify(payload).slice(0, 14000);
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const resp = await fetch(endpoint, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
@@ -119,14 +131,11 @@ async function aiAssess(payload: {
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    console.error("AI gateway error", resp.status, text);
+    console.error("AI error", resp.status, text);
     if (resp.status === 429) {
       return { summary: "AI rate-limited, please retry shortly.", risk_level: "unknown", findings: [] };
     }
-    if (resp.status === 402) {
-      return { summary: "AI credits exhausted. Top up to resume.", risk_level: "unknown", findings: [] };
-    }
-    return { summary: "AI assessment failed.", risk_level: "unknown", findings: [] };
+    return { summary: `AI assessment failed (${resp.status}).`, risk_level: "unknown", findings: [] };
   }
   const json = await resp.json();
   const call = json?.choices?.[0]?.message?.tool_calls?.[0];

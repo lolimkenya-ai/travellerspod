@@ -13,6 +13,8 @@ import {
   Mail,
   Trash2,
   ShieldOff,
+  Crown,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRoles } from "@/hooks/useRoles";
@@ -22,17 +24,16 @@ import { useEffect } from "react";
 export default function Settings() {
   const navigate = useNavigate();
   const { user, profile, loading, signOut } = useAuth();
-  const { isAdmin } = useRoles();
+  const { isAdmin, isSuperAdmin, loading: rolesLoading } = useRoles();
 
-  // Ensure we wait for auth state to load
   useEffect(() => {
     if (!loading && !user) {
-      // Auth loaded but user not signed in - redirect to home
       navigate("/");
     }
   }, [loading, user, navigate]);
 
-  if (loading) {
+  // Show spinner while auth OR roles are resolving
+  if (loading || (user && rolesLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -69,6 +70,7 @@ export default function Settings() {
         <h1 className="text-base font-semibold text-foreground">Settings</h1>
       </header>
 
+      {/* Profile card */}
       <div className="px-4 py-6">
         <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
           <img
@@ -82,9 +84,21 @@ export default function Settings() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-foreground">{profile.display_name}</p>
             <p className="text-xs text-muted-foreground">@{profile.nametag}</p>
-            <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-              {profile.account_type}
-            </p>
+            <div className="mt-1 flex items-center gap-1.5">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {profile.account_type}
+              </p>
+              {isSuperAdmin && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600">
+                  <Crown className="h-2.5 w-2.5" /> Super Admin
+                </span>
+              )}
+              {!isSuperAdmin && isAdmin && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
+                  <Shield className="h-2.5 w-2.5" /> Admin
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -113,7 +127,28 @@ export default function Settings() {
         <Row to="/settings/sessions" icon={<ShieldCheck className="h-4 w-4" />} label="Sign out everywhere" />
       </Section>
 
-      {isAdmin && (
+      {/* Admin tools — only shown when user has elevated role */}
+      {isSuperAdmin && (
+        <Section title="Super Admin">
+          <Row
+            to="/superadmin"
+            icon={<Crown className="h-4 w-4 text-amber-500" />}
+            label="Super Admin Dashboard"
+          />
+          <Row
+            to="/access"
+            icon={<ShieldCheck className="h-4 w-4" />}
+            label="Verification queue"
+          />
+          <Row
+            to="/access/compose"
+            icon={<Shield className="h-4 w-4" />}
+            label="Post as Safiripod"
+          />
+        </Section>
+      )}
+
+      {!isSuperAdmin && isAdmin && (
         <Section title="Admin">
           <Row to="/access" icon={<ShieldCheck className="h-4 w-4" />} label="Safiripod admin" />
         </Section>
@@ -130,7 +165,12 @@ export default function Settings() {
           <LogOut className="h-4 w-4" />
           Sign out
         </button>
-        <Row to="/settings/delete" icon={<Trash2 className="h-4 w-4 text-destructive" />} label="Delete account" destructive />
+        <Row
+          to="/settings/delete"
+          icon={<Trash2 className="h-4 w-4 text-destructive" />}
+          label="Delete account"
+          destructive
+        />
       </Section>
     </div>
   );
@@ -166,7 +206,9 @@ function Row({
       className="flex items-center gap-3 border-b border-border/50 px-4 py-3 text-sm last:border-b-0 hover:bg-accent"
     >
       <span className="text-muted-foreground">{icon}</span>
-      <span className={`flex-1 ${destructive ? "text-destructive" : "text-foreground"}`}>{label}</span>
+      <span className={`flex-1 ${destructive ? "text-destructive" : "text-foreground"}`}>
+        {label}
+      </span>
       {right}
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
     </Link>

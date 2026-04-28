@@ -6,9 +6,9 @@ import { useNavigate } from "react-router-dom";
 
 interface Props {
   children: ReactNode;
-  /** "user" requires sign-in; "admin"/"super_admin" require role */
+  /** "user" requires sign-in; "moderator"/"admin"/"super_admin" require role */
   require?: "user" | "moderator" | "admin" | "super_admin";
-  /** When unauthenticated, where to redirect (default: open sign-in sheet on home) */
+  /** When unauthenticated, where to redirect (default: home) */
   fallback?: string;
 }
 
@@ -17,7 +17,9 @@ export function ProtectedRoute({ children, require = "user", fallback = "/" }: P
   const roles = useRoles();
   const navigate = useNavigate();
 
-  const loading = authLoading || (user ? roles.loading : false);
+  // Only wait for roles if we have a user AND we need a role beyond "user"
+  const needsRoleCheck = require !== "user";
+  const loading = authLoading || (user && needsRoleCheck ? roles.loading : false);
 
   useEffect(() => {
     if (loading) return;
@@ -34,9 +36,10 @@ export function ProtectedRoute({ children, require = "user", fallback = "/" }: P
       </div>
     );
   }
+
   if (!user) return null;
 
-  // Role gates
+  // Role gates — super_admin inherits admin, admin inherits moderator
   const allowed =
     require === "user" ||
     (require === "moderator" && roles.isModerator) ||
@@ -44,18 +47,35 @@ export function ProtectedRoute({ children, require = "user", fallback = "/" }: P
     (require === "super_admin" && roles.isSuperAdmin);
 
   if (!allowed) {
+    const roleLabel =
+      require === "super_admin"
+        ? "Super Admin"
+        : require === "admin"
+          ? "Admin"
+          : "Moderator";
+
     return (
-      <div className="mx-auto min-h-screen max-w-[480px] bg-background p-8 text-center">
-        <p className="text-sm font-semibold text-foreground">Access denied</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          You don't have permission to view this page.
-        </p>
-        <button
-          onClick={() => navigate("/")}
-          className="mt-4 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
-        >
-          Go home
-        </button>
+      <div className="mx-auto flex min-h-screen max-w-[480px] flex-col items-center justify-center bg-background p-8 text-center">
+        <div className="rounded-2xl border border-border bg-card p-8">
+          <p className="text-base font-semibold text-foreground">🔒 Access denied</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This page requires <span className="font-semibold text-foreground">{roleLabel}</span> access.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={() => navigate(-1)}
+              className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent"
+            >
+              Go back
+            </button>
+            <button
+              onClick={() => navigate("/")}
+              className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
+            >
+              Go home
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

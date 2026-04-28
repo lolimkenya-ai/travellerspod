@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Activity,
   BarChart3,
-  Ban,
   Flag,
   Loader2,
   Settings,
@@ -11,14 +10,27 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  TrendingUp,
   Search,
+  Trash2,
+  MessageSquare,
+  Crown,
+  Shield,
+  ShieldCheck,
+  ShieldOff,
+  FileText,
+  RefreshCw,
+  ArrowLeft,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRoles } from "@/hooks/useRoles";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/format";
+
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
 
 interface SystemStats {
   total_users: number;
@@ -32,69 +44,119 @@ interface SystemStats {
   active_conversations: number;
 }
 
-interface UserFlag {
+interface AuditLog {
   id: string;
-  user_id: string;
-  reason: string;
-  flag_type: string;
-  flagged_by: string;
-  resolved: boolean;
+  action: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
   created_at: string;
+  metadata: any;
 }
 
-interface SystemSetting {
+interface ManagedUser {
   id: string;
-  setting_key: string;
-  setting_value: Record<string, any>;
-  description: string;
-  updated_at: string;
+  nametag: string;
+  display_name: string;
+  avatar_url: string | null;
+  verified: boolean;
+  account_type: string;
+  flagged_danger: boolean;
+  created_at: string;
+  roles: string[];
 }
+
+/* ------------------------------------------------------------------ */
+/* Component                                                           */
+/* ------------------------------------------------------------------ */
+
+const TABS = ["overview", "users", "audit", "flags", "settings"] as const;
+type Tab = typeof TABS[number];
 
 export default function SuperadminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isSuperAdmin, loading: rolesLoading } = useRoles();
-  const [stats, setStats] = useState<SystemStats | null>(null);
-  const [userFlags, setUserFlags] = useState<UserFlag[]>([]);
-  const [settings, setSettings] = useState<SystemSetting[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "flags" | "settings">("overview");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSetting, setSelectedSetting] = useState<SystemSetting | null>(null);
-  const [settingValue, setSettingValue] = useState("");
 
-  // Redirect if not superadmin
+  const [stats, setStats] = useState<SystemStats | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSetting, setSelectedSetting] = useState<any>(null);
+  const [settingValue, setSettingValue] = useState("");
+  const [settings, setSettings] = useState<any[]>([]);
+
+  // Redirect if not super admin (once roles resolved)
   useEffect(() => {
     if (!rolesLoading && !isSuperAdmin) {
       navigate("/");
     }
   }, [isSuperAdmin, rolesLoading, navigate]);
 
+  /* ---- Data fetchers ---- */
+
   const fetchStats = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc("get_system_statistics");
-
-      if (error) throw error;
-      setStats((data as SystemStats[])?.[0] || null);
+      if (!error) setStats((data as SystemStats[])?.[0] ?? null);
     } catch (err) {
       console.error("Failed to fetch stats:", err);
-      toast.error("Failed to load system statistics");
     }
   }, []);
 
-  const fetchUserFlags = useCallback(async () => {
+  const fetchAuditLogs = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from("user_flags")
+        .from("audit_logs")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(50);
-
-      if (error) throw error;
-      setUserFlags((data as UserFlag[]) || []);
+      if (!error) setAuditLogs((data as AuditLog[]) ?? []);
     } catch (err) {
-      console.error("Failed to fetch user flags:", err);
-      toast.error("Failed to load user flags");
+      console.error("Failed to fetch audit logs:", err);
+    }
+  }, []);
+
+  const fetchUsers = useCallback(async (search?: string) => {
+    try {
+      let query = supabase
+        .from("profiles")
+        .select("id, nametag, display_name, avatar_url, verified, account_type, flagged_danger, created_at")
+        .order("created_at", { ascending: false })
+        .limit(40);
+
+      if (search?.trim()) {
+        query = query.or(`display_name.ilike.%${search}%,nametag.ilike.%${search}%`);
+      }
+
+      const { data: profiles, error } = await query;
+      if (error) throw error;
+
+      // Fetch roles for each user
+      const ids = (profiles ?? []).map((p) => p.id);
+      const { data: roleRows } = ids.length
+        ? await supabase.from("user_roles").select("user_id, role").in("user_id", ids)
+        : { data: [] };
+
+      const roleMap = new Map<string, string[]>();
+      for (const r of roleRows ?? []) {
+        const list = roleMap.get(r.user_id) ?? [];
+        list.push(r.role);
+        roleMap.set(r.user_id, list);
+      }
+
+      setManagedUsers(
+        (profiles ?? []).map((p) => ({
+          ...p,
+          roles: roleMap.get(p.id) ?? ["user"],
+        }))
+      );
+    } catch (err) {
+      console.error("Failed to fetch users:", err);
     }
   }, []);
 
@@ -104,115 +166,147 @@ export default function SuperadminDashboard() {
         .from("system_settings")
         .select("*")
         .order("setting_key");
-
-      if (error) throw error;
-      setSettings((data as SystemSetting[]) || []);
+      if (!error) setSettings(data ?? []);
     } catch (err) {
       console.error("Failed to fetch settings:", err);
-      toast.error("Failed to load system settings");
     }
   }, []);
 
   useEffect(() => {
-    const loadData = async () => {
+    if (!isSuperAdmin) return;
+    const load = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchUserFlags(), fetchSettings()]);
+      await Promise.all([fetchStats(), fetchAuditLogs(), fetchUsers(), fetchSettings()]);
       setLoading(false);
     };
-    loadData();
-  }, [fetchStats, fetchUserFlags, fetchSettings]);
+    load();
+  }, [isSuperAdmin, fetchStats, fetchAuditLogs, fetchUsers, fetchSettings]);
+
+  /* ---- Actions ---- */
+
+  const handleAssignRole = async (userId: string, role: string) => {
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .upsert({ user_id: userId, role }, { onConflict: "user_id,role" });
+      if (error) throw error;
+
+      // Audit log
+      await supabase.from("audit_logs").insert({
+        actor_id: user?.id,
+        action: `assign_role:${role}`,
+        entity_type: "user",
+        entity_id: userId,
+      });
+
+      toast.success(`Role "${role}" assigned`);
+      fetchUsers(userSearch);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to assign role");
+    }
+  };
+
+  const handleRevokeRole = async (userId: string, role: string) => {
+    if (role === "user") return; // can't revoke base user role
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("role", role);
+      if (error) throw error;
+
+      await supabase.from("audit_logs").insert({
+        actor_id: user?.id,
+        action: `revoke_role:${role}`,
+        entity_type: "user",
+        entity_id: userId,
+      });
+
+      toast.success(`Role "${role}" revoked`);
+      fetchUsers(userSearch);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to revoke role");
+    }
+  };
 
   const handleUpdateSetting = async (settingKey: string, newValue: any) => {
     try {
       const { error } = await supabase
         .from("system_settings")
-        .update({
-          setting_value: newValue,
-          updated_by: user?.id,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ setting_value: newValue, updated_by: user?.id, updated_at: new Date().toISOString() })
         .eq("setting_key", settingKey);
-
       if (error) throw error;
 
-      // Log audit action
       await supabase.from("audit_logs").insert({
         actor_id: user?.id,
-        action_type: "update_setting",
-        target_type: "system_setting",
-        target_id: settingKey,
-        changes: { setting_key: settingKey, new_value: newValue },
+        action: "update_setting",
+        entity_type: "system_setting",
+        entity_id: null,
+        metadata: { setting_key: settingKey, new_value: newValue },
       });
 
-      toast.success("Setting updated successfully");
+      toast.success("Setting updated");
       fetchSettings();
       setSelectedSetting(null);
-    } catch (err) {
-      console.error("Failed to update setting:", err);
-      toast.error("Failed to update setting");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to update setting");
     }
   };
-
-  const handleResolveFlag = async (flagId: string) => {
-    try {
-      const { error } = await supabase
-        .from("user_flags")
-        .update({
-          resolved: true,
-          resolved_at: new Date().toISOString(),
-          resolved_by: user?.id,
-        })
-        .eq("id", flagId);
-
-      if (error) throw error;
-
-      toast.success("Flag resolved");
-      fetchUserFlags();
-    } catch (err) {
-      console.error("Failed to resolve flag:", err);
-      toast.error("Failed to resolve flag");
-    }
-  };
-
-  const filteredFlags = userFlags.filter((flag) =>
-    flag.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    flag.flag_type.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   if (rolesLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
+  const filteredAudit = auditLogs.filter(
+    (l) =>
+      l.action?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.entity_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.actor_email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 py-4">
-          <h1 className="text-2xl font-bold text-foreground">Superadmin Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            System management and platform administration
-          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <Crown className="h-5 w-5 text-amber-500" />
+                <h1 className="text-xl font-bold text-foreground">Super Admin</h1>
+              </div>
+              <p className="text-xs text-muted-foreground">Full system control</p>
+            </div>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6">
-        {/* Tab Navigation */}
-        <div className="flex gap-4 mb-6 border-b border-border">
-          {["overview", "flags", "settings"].map((tab) => (
+        {/* Tab nav */}
+        <div className="mb-6 flex gap-1 overflow-x-auto border-b border-border pb-0">
+          {TABS.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab as any)}
+              onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-4 py-2 font-medium border-b-2 transition-colors",
+                "shrink-0 border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors",
                 activeTab === tab
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab}
             </button>
           ))}
         </div>
@@ -221,294 +315,362 @@ export default function SuperadminDashboard() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : activeTab === "overview" ? (
-          // Overview Tab
-          <div className="space-y-6">
-            {/* Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <StatCard
-                icon={Users}
-                label="Total Users"
-                value={stats?.total_users || 0}
-                color="blue"
-              />
-              <StatCard
-                icon={Activity}
-                label="Total Posts"
-                value={stats?.total_posts || 0}
-                color="green"
-              />
-              <StatCard
-                icon={Flag}
-                label="Open Reports"
-                value={stats?.open_reports || 0}
-                color="red"
-              />
-              <StatCard
-                icon={Trash2}
-                label="Removed Posts"
-                value={stats?.removed_posts || 0}
-                color="orange"
-              />
-              <StatCard
-                icon={CheckCircle}
-                label="Verified Businesses"
-                value={stats?.verified_businesses || 0}
-                color="green"
-              />
-              <StatCard
-                icon={Clock}
-                label="Pending Verifications"
-                value={stats?.pending_verifications || 0}
-                color="yellow"
-              />
-            </div>
-
-            {/* Additional Metrics */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="border border-border rounded-lg p-6 bg-card">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-foreground">Messaging Activity</h3>
-                  <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Total Messages</span>
-                    <span className="font-semibold text-foreground">{stats?.total_messages || 0}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Active Conversations</span>
-                    <span className="font-semibold text-foreground">
-                      {stats?.active_conversations || 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border border-border rounded-lg p-6 bg-card">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-foreground">Content Health</h3>
-                  <BarChart3 className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Total Reports</span>
-                    <span className="font-semibold text-foreground">{stats?.total_reports || 0}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Resolution Rate</span>
-                    <span className="font-semibold text-foreground">
-                      {stats && stats.total_reports > 0
-                        ? Math.round(((stats.total_reports - stats.open_reports) / stats.total_reports) * 100)
-                        : 0}
-                      %
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : activeTab === "flags" ? (
-          // Flags Tab
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search flags..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-
-            <div className="space-y-2">
-              {filteredFlags.length === 0 ? (
-                <div className="text-center py-12">
-                  <CheckCircle className="h-12 w-12 mx-auto text-green-500 mb-4" />
-                  <p className="text-muted-foreground">No user flags found</p>
-                </div>
-              ) : (
-                filteredFlags.map((flag) => (
-                  <div
-                    key={flag.id}
-                    className="border border-border rounded-lg p-4 bg-card flex items-center justify-between"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Flag className="h-4 w-4 text-red-500" />
-                        <span className="font-semibold text-foreground">{flag.flag_type}</span>
-                        {flag.resolved && (
-                          <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
-                            Resolved
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{flag.reason}</p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {new Date(flag.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {!flag.resolved && (
-                      <button
-                        onClick={() => handleResolveFlag(flag.id)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-                      >
-                        Resolve
-                      </button>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
         ) : (
-          // Settings Tab
-          <div className="space-y-4">
-            <div className="grid gap-4">
-              {settings.length === 0 ? (
-                <div className="text-center py-12">
-                  <Settings className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No settings available</p>
+          <>
+            {/* ── OVERVIEW ── */}
+            {activeTab === "overview" && (
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <StatCard icon={Users} label="Total Users" value={stats?.total_users ?? 0} color="blue" />
+                  <StatCard icon={Activity} label="Total Posts" value={stats?.total_posts ?? 0} color="green" />
+                  <StatCard icon={Flag} label="Open Reports" value={stats?.open_reports ?? 0} color="red" />
+                  <StatCard icon={CheckCircle} label="Verified Businesses" value={stats?.verified_businesses ?? 0} color="green" />
+                  <StatCard icon={Trash2} label="Removed Posts" value={stats?.removed_posts ?? 0} color="orange" />
+                  <StatCard icon={Clock} label="Pending Verifications" value={stats?.pending_verifications ?? 0} color="yellow" />
+                  <StatCard icon={MessageSquare} label="Total Messages" value={stats?.total_messages ?? 0} color="blue" />
+                  <StatCard icon={BarChart3} label="Active Convos" value={stats?.active_conversations ?? 0} color="green" />
                 </div>
-              ) : (
-                settings.map((setting) => (
-                  <div
-                    key={setting.id}
-                    className="border border-border rounded-lg p-4 bg-card cursor-pointer hover:bg-accent/50"
-                    onClick={() => {
-                      setSelectedSetting(setting);
-                      setSettingValue(JSON.stringify(setting.setting_value, null, 2));
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-foreground">{setting.setting_key}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">{setting.description}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Last updated: {new Date(setting.updated_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <Settings className="h-5 w-5 text-muted-foreground" />
-                    </div>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-foreground">Content Health</h3>
+                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
                   </div>
-                ))
-              )}
-            </div>
-
-            {/* Setting Editor Modal */}
-            {selectedSetting && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-background border border-border rounded-lg p-6 max-w-md w-full">
-                  <h2 className="text-lg font-bold text-foreground mb-4">
-                    Edit: {selectedSetting.setting_key}
-                  </h2>
-
-                  <textarea
-                    value={settingValue}
-                    onChange={(e) => setSettingValue(e.target.value)}
-                    className="w-full h-40 p-3 border border-border rounded-lg bg-background text-foreground font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-
-                  <div className="flex gap-2 mt-4">
-                    <button
-                      onClick={() => {
-                        handleUpdateSetting(selectedSetting.setting_key, JSON.parse(settingValue));
-                      }}
-                      className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-medium"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setSelectedSetting(null)}
-                      className="flex-1 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent font-medium"
-                    >
-                      Cancel
-                    </button>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Reports</span>
+                      <span className="font-semibold">{stats?.total_reports ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Resolution Rate</span>
+                      <span className="font-semibold">
+                        {stats && stats.total_reports > 0
+                          ? Math.round(
+                              ((stats.total_reports - stats.open_reports) / stats.total_reports) * 100
+                            )
+                          : 0}
+                        %
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
-          </div>
+
+            {/* ── USER MANAGEMENT ── */}
+            {activeTab === "users" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search users by name or @nametag"
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && fetchUsers(userSearch)}
+                      className="w-full rounded-lg border border-border bg-background py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <button
+                    onClick={() => fetchUsers(userSearch)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-accent"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {managedUsers.map((u) => (
+                    <UserManagementRow
+                      key={u.id}
+                      user={u}
+                      currentUserId={user?.id ?? ""}
+                      onAssignRole={handleAssignRole}
+                      onRevokeRole={handleRevokeRole}
+                    />
+                  ))}
+                  {managedUsers.length === 0 && (
+                    <p className="py-8 text-center text-sm text-muted-foreground">No users found</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── AUDIT LOGS ── */}
+            {activeTab === "audit" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Filter by action or entity type..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background py-2 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <button onClick={fetchAuditLogs} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-accent">
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {filteredAudit.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">No audit logs found</p>
+                    </div>
+                  ) : (
+                    filteredAudit.map((log) => (
+                      <div key={log.id} className="rounded-lg border border-border bg-card p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-mono font-semibold text-primary">
+                                {log.action}
+                              </span>
+                              {log.entity_type && (
+                                <span className="text-xs text-muted-foreground">
+                                  on <span className="font-medium text-foreground">{log.entity_type}</span>
+                                </span>
+                              )}
+                            </div>
+                            {log.actor_email && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                by {log.actor_email}
+                              </p>
+                            )}
+                            {log.metadata && Object.keys(log.metadata).length > 0 && (
+                              <pre className="mt-2 max-h-20 overflow-auto rounded bg-muted p-2 text-[10px] text-muted-foreground">
+                                {JSON.stringify(log.metadata, null, 2)}
+                              </pre>
+                            )}
+                          </div>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {timeAgo(log.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── FLAGS ── */}
+            {activeTab === "flags" && (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border bg-card p-4 text-center">
+                  <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
+                  <p className="text-sm text-foreground font-semibold">User Flags</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Flag management is available in the Reports queue.
+                  </p>
+                  <button
+                    onClick={() => navigate("/access/reports")}
+                    className="mt-3 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                  >
+                    Go to Reports
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── SETTINGS ── */}
+            {activeTab === "settings" && (
+              <div className="space-y-4">
+                {settings.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <Settings className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">No settings available</p>
+                  </div>
+                ) : (
+                  settings.map((s) => (
+                    <div
+                      key={s.id}
+                      onClick={() => { setSelectedSetting(s); setSettingValue(JSON.stringify(s.setting_value, null, 2)); }}
+                      className="cursor-pointer rounded-lg border border-border bg-card p-4 hover:bg-accent/40 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0">
+                          <h3 className="font-mono text-sm font-semibold text-foreground">{s.setting_key}</h3>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
+                          <p className="mt-1 rounded bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground inline-block">
+                            {JSON.stringify(s.setting_value)}
+                          </p>
+                        </div>
+                        <Settings className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                {/* Editor modal */}
+                {selectedSetting && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-xl">
+                      <h2 className="text-base font-bold text-foreground">
+                        Edit: <span className="font-mono">{selectedSetting.setting_key}</span>
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-foreground">{selectedSetting.description}</p>
+                      <textarea
+                        value={settingValue}
+                        onChange={(e) => setSettingValue(e.target.value)}
+                        className="mt-3 h-40 w-full rounded-lg border border-border bg-muted p-3 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          onClick={() => {
+                            try {
+                              handleUpdateSetting(selectedSetting.setting_key, JSON.parse(settingValue));
+                            } catch {
+                              toast.error("Invalid JSON value");
+                            }
+                          }}
+                          className="flex-1 rounded-full bg-primary py-2 text-sm font-semibold text-primary-foreground"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setSelectedSetting(null)}
+                          className="flex-1 rounded-full border border-border py-2 text-sm font-semibold text-foreground hover:bg-accent"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-}: {
-  icon: any;
-  label: string;
-  value: number;
-  color: string;
-}) {
-  const colorClasses = {
-    blue: "bg-blue-100 text-blue-600",
-    green: "bg-green-100 text-green-600",
-    red: "bg-red-100 text-red-600",
-    orange: "bg-orange-100 text-orange-600",
-    yellow: "bg-yellow-100 text-yellow-600",
-  };
+/* ------------------------------------------------------------------ */
+/* Sub-components                                                       */
+/* ------------------------------------------------------------------ */
 
+function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
+  const colorClasses: Record<string, string> = {
+    blue: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+    green: "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
+    red: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+    orange: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
+    yellow: "bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400",
+  };
   return (
-    <div className="border border-border rounded-lg p-6 bg-card">
+    <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="text-3xl font-bold text-foreground mt-2">{value.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-foreground">{value.toLocaleString()}</p>
         </div>
-        <div className={cn("p-3 rounded-lg", colorClasses[color as keyof typeof colorClasses])}>
-          <Icon className="h-6 w-6" />
+        <div className={cn("rounded-lg p-2.5", colorClasses[color])}>
+          <Icon className="h-5 w-5" />
         </div>
       </div>
     </div>
   );
 }
 
-// Icon placeholder for Trash2
-function Trash2(props: any) {
+function UserManagementRow({
+  user,
+  currentUserId,
+  onAssignRole,
+  onRevokeRole,
+}: {
+  user: ManagedUser;
+  currentUserId: string;
+  onAssignRole: (id: string, role: string) => void;
+  onRevokeRole: (id: string, role: string) => void;
+}) {
+  const isSelf = user.id === currentUserId;
+  const hasAdmin = user.roles.includes("admin") || user.roles.includes("super_admin");
+  const hasMod = user.roles.includes("moderator");
+
   return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="3 6 5 6 21 6"></polyline>
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-      <line x1="10" y1="11" x2="10" y2="17"></line>
-      <line x1="14" y1="11" x2="14" y2="17"></line>
-    </svg>
+    <div className={cn(
+      "rounded-xl border border-border bg-card p-4",
+      user.flagged_danger && "border-destructive/40 bg-destructive/5"
+    )}>
+      <div className="flex items-center gap-3">
+        <img
+          src={
+            user.avatar_url ??
+            `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.display_name)}`
+          }
+          alt=""
+          className="h-10 w-10 rounded-full object-cover"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-sm font-semibold text-foreground">{user.display_name}</p>
+            {user.verified && <CheckCircle className="h-3.5 w-3.5 text-primary" />}
+            {user.flagged_danger && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+          </div>
+          <p className="text-xs text-muted-foreground">@{user.nametag}</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {user.roles.map((r) => (
+              <span
+                key={r}
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                  r === "super_admin"
+                    ? "bg-amber-100 text-amber-700"
+                    : r === "admin"
+                      ? "bg-primary/10 text-primary"
+                      : r === "moderator"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-muted text-muted-foreground"
+                )}
+              >
+                {r}
+              </span>
+            ))}
+          </div>
+        </div>
+        {!isSelf && (
+          <div className="flex flex-col gap-1">
+            {!hasAdmin && (
+              <button
+                onClick={() => onAssignRole(user.id, "admin")}
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20"
+              >
+                <ShieldCheck className="h-3 w-3" /> +Admin
+              </button>
+            )}
+            {hasAdmin && !user.roles.includes("super_admin") && (
+              <button
+                onClick={() => onRevokeRole(user.id, "admin")}
+                className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/20"
+              >
+                <ShieldOff className="h-3 w-3" /> −Admin
+              </button>
+            )}
+            {!hasMod && !hasAdmin && (
+              <button
+                onClick={() => onAssignRole(user.id, "moderator")}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-200"
+              >
+                <Shield className="h-3 w-3" /> +Mod
+              </button>
+            )}
+            {hasMod && !hasAdmin && (
+              <button
+                onClick={() => onRevokeRole(user.id, "moderator")}
+                className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/20"
+              >
+                <ShieldOff className="h-3 w-3" /> −Mod
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-// Icon placeholder for MessageSquare
-function MessageSquare(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-    </svg>
-  );
-}
+
