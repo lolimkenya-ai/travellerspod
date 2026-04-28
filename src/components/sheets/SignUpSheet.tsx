@@ -13,7 +13,7 @@ const credSchema = z.object({
 type Mode = "choose" | "signup" | "signin";
 
 export function SignUpSheet() {
-  const { showSignUp, closeSignUp, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
+  const { showSignUp, closeSignUp, signInWithEmail, signUpWithEmail } = useAuth();
   const [mode, setMode] = useState<Mode>("choose");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -76,20 +76,6 @@ export function SignUpSheet() {
               Sign in to like, comment, save to Trip Boards, and message creators & businesses.
             </p>
           )}
-
-          <button
-            onClick={signInWithGoogle}
-            className="flex w-full items-center justify-center gap-3 rounded-full bg-foreground py-3 text-sm font-semibold text-background hover:bg-foreground/90"
-          >
-            <GoogleGlyph />
-            Continue with Google
-          </button>
-
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">or</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
 
           {mode === "signup" && (
             <>
@@ -180,13 +166,5 @@ export function SignUpSheet() {
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function GoogleGlyph() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
-      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.4-1.6 4-5.5 4-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3.3 14.6 2.4 12 2.4 6.7 2.4 2.4 6.7 2.4 12s4.3 9.6 9.6 9.6c5.5 0 9.2-3.9 9.2-9.4 0-.6-.1-1.1-.2-2H12z" />
-    </svg>
   );
 }
