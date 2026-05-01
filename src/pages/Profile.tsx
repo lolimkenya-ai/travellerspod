@@ -449,8 +449,8 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
       const select =
         kind === "followers"
           ? "follower:profiles!follows_follower_id_fkey(id, nametag, display_name, avatar_url, is_verified)"
-          : "following:profiles!follows_following_id_fkey(id, nametag, display_name, avatar_url, is_verified)";
-      const filter = kind === "followers" ? "following_id" : "follower_id";
+          : "following:profiles!follows_followee_id_fkey(id, nametag, display_name, avatar_url, is_verified)";
+      const filter = kind === "followers" ? "followee_id" : "follower_id";
 
       const { data, error } = await supabase
         .from("follows")
@@ -461,7 +461,7 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
       if (cancelled) return;
       if (error) {
         // Fallback if FK alias names differ — fetch ids then resolve profiles.
-        const idCol = kind === "followers" ? "follower_id" : "following_id";
+        const idCol = kind === "followers" ? "follower_id" : "followee_id";
         const { data: rows } = await supabase.from("follows").select(idCol).eq(filter, profileId).limit(200);
         const ids = (rows ?? []).map((r: any) => r[idCol]).filter(Boolean);
         if (ids.length) {

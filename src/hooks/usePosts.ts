@@ -160,9 +160,9 @@ export function usePosts({ scope = "discover", authorId, categoryLabel, limit = 
         }
         const { data: f } = await supabase
           .from("follows")
-          .select("following_id")
+          .select("followee_id")
           .eq("follower_id", me);
-        followingIds = (f ?? []).map((r) => r.following_id);
+        followingIds = (f ?? []).map((r: any) => r.followee_id);
         if (followingIds.length === 0) {
           if (!cancelled) {
             setPosts([]);
