@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function Discover() {
   const { user } = useAuth();
   const { active } = useCategoryFilter();
-  const { posts, loading } = usePosts({ scope: "all", categoryLabel: active });
+  const { posts, loading } = usePosts({ scope: "discover", categoryLabel: active });
 
   if (loading && posts.length === 0) {
     return (

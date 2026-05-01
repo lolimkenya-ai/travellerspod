@@ -70,7 +70,7 @@ export default function Profile() {
           .from("follows")
           .select("follower_id")
           .eq("follower_id", user.id)
-          .eq("following_id", p.id)
+          .eq("followee_id", p.id)
           .maybeSingle();
         if (!cancelled) setFollowing(!!f);
       } else {
@@ -104,7 +104,7 @@ export default function Profile() {
           .from("follows")
           .delete()
           .eq("follower_id", user.id)
-          .eq("following_id", profile.id);
+          .eq("followee_id", profile.id);
         if (error) toast.error(error.message);
         else {
           setFollowing(false);
@@ -113,7 +113,7 @@ export default function Profile() {
       } else {
         const { error } = await supabase
           .from("follows")
-          .insert({ follower_id: user.id, following_id: profile.id });
+          .insert({ follower_id: user.id, followee_id: profile.id });
         if (error) toast.error(error.message);
         else {
           setFollowing(true);
@@ -484,9 +484,9 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
       if (user) {
         const { data: my } = await supabase
           .from("follows")
-          .select("following_id")
+          .select("followee_id")
           .eq("follower_id", user.id);
-        if (!cancelled) setFollowingSet(new Set((my ?? []).map((r) => r.following_id)));
+        if (!cancelled) setFollowingSet(new Set((my ?? []).map((r: any) => r.followee_id)));
       }
     })();
     return () => {
@@ -509,7 +509,7 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
         .from("follows")
         .delete()
         .eq("follower_id", user.id)
-        .eq("following_id", id);
+        .eq("followee_id", id);
       if (error) {
         next.add(id);
         setFollowingSet(new Set(next));
@@ -518,7 +518,7 @@ function FollowList({ profileId, kind }: { profileId: string; kind: "followers" 
     } else {
       next.add(id);
       setFollowingSet(next);
-      const { error } = await supabase.from("follows").insert({ follower_id: user.id, following_id: id });
+      const { error } = await supabase.from("follows").insert({ follower_id: user.id, followee_id: id });
       if (error) {
         next.delete(id);
         setFollowingSet(new Set(next));
