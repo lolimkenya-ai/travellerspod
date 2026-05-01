@@ -33,7 +33,6 @@ import Access from "./pages/Access";
 import AccessCompose from "./pages/AccessCompose";
 import PostDetail from "./pages/PostDetail";
 import Reports from "./pages/Reports";
-import ModeratorDashboard from "./pages/ModeratorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound.tsx";
@@ -85,7 +84,7 @@ const App = () => (
                   <Route path="/access" element={<ProtectedRoute require="admin"><Access /></ProtectedRoute>} />
                   <Route path="/access/compose" element={<ProtectedRoute require="super_admin"><AccessCompose /></ProtectedRoute>} />
                   <Route path="/access/reports" element={<ProtectedRoute require="moderator"><Reports /></ProtectedRoute>} />
-                  <Route path="/moderator" element={<ProtectedRoute require="moderator"><ModeratorDashboard /></ProtectedRoute>} />
+                  <Route path="/moderator" element={<Navigate to="/access/reports" replace />} />
                   <Route path="/superadmin" element={<ProtectedRoute require="super_admin"><SuperadminDashboard /></ProtectedRoute>} />
                   <Route path="/post/:id" element={<PostDetail />} />
                   <Route path="/privacy" element={<PrivacyPolicy />} />

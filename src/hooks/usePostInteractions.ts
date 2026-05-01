@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { rateLimit } from "@/lib/rateLimit";
 import { toast } from "sonner";
 
 /**
@@ -56,16 +57,27 @@ export function usePostLike(postId: string, initialCount: number) {
     setLiked(!wasLiked);
     setCount((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
 
-    const { data, error } = await supabase.rpc("toggle_like", { _post_id: postId });
-    
+    let error: { message: string } | null = null;
+    if (wasLiked) {
+      const res = await supabase
+        .from("post_likes")
+        .delete()
+        .eq("post_id", postId)
+        .eq("user_id", user.id);
+      error = res.error;
+    } else {
+      const res = await supabase
+        .from("post_likes")
+        .insert({ post_id: postId, user_id: user.id });
+      // Ignore duplicate-key errors (already liked).
+      if (res.error && (res.error as any).code !== "23505") error = res.error;
+    }
+
     if (error) {
-      // Revert
+      // Revert optimistic update
       setLiked(wasLiked);
       setCount((c) => Math.max(0, c + (wasLiked ? 1 : -1)));
       toast.error(error.message);
-    } else {
-      // Ensure sync with server return value
-      if (data !== undefined) setLiked(!!data);
     }
     setBusy(false);
   }, [busy, liked, postId, promptSignUp, user]);

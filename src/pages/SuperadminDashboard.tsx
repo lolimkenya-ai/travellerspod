@@ -101,8 +101,28 @@ export default function SuperadminDashboard() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc("get_system_statistics");
-      if (!error) setStats((data as SystemStats[])?.[0] ?? null);
+      const [users, posts, reports, openReports, removed, verified, pending, msgs, convs] = await Promise.all([
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase.from("posts").select("*", { count: "exact", head: true }),
+        supabase.from("content_reports").select("*", { count: "exact", head: true }),
+        supabase.from("content_reports").select("*", { count: "exact", head: true }).eq("status", "open"),
+        supabase.from("posts").select("*", { count: "exact", head: true }).not("removed_at", "is", null),
+        supabase.from("profiles").select("*", { count: "exact", head: true }).eq("is_verified", true).eq("account_type", "business"),
+        supabase.from("profiles").select("*", { count: "exact", head: true }).eq("verification_status", "pending"),
+        supabase.from("messages").select("*", { count: "exact", head: true }),
+        supabase.from("conversations").select("*", { count: "exact", head: true }),
+      ]);
+      setStats({
+        total_users: users.count ?? 0,
+        total_posts: posts.count ?? 0,
+        total_reports: reports.count ?? 0,
+        open_reports: openReports.count ?? 0,
+        removed_posts: removed.count ?? 0,
+        verified_businesses: verified.count ?? 0,
+        pending_verifications: pending.count ?? 0,
+        total_messages: msgs.count ?? 0,
+        active_conversations: convs.count ?? 0,
+      });
     } catch (err) {
       console.error("Failed to fetch stats:", err);
     }
@@ -163,9 +183,9 @@ export default function SuperadminDashboard() {
   const fetchSettings = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from("system_settings")
+        .from("app_settings")
         .select("*")
-        .order("setting_key");
+        .order("key");
       if (!error) setSettings(data ?? []);
     } catch (err) {
       console.error("Failed to fetch settings:", err);
@@ -184,7 +204,7 @@ export default function SuperadminDashboard() {
 
   /* ---- Actions ---- */
 
-  const handleAssignRole = async (userId: string, role: string) => {
+  const handleAssignRole = async (userId: string, role: "admin" | "moderator" | "super_admin" | "user") => {
     try {
       const { error } = await supabase
         .from("user_roles")
@@ -206,7 +226,7 @@ export default function SuperadminDashboard() {
     }
   };
 
-  const handleRevokeRole = async (userId: string, role: string) => {
+  const handleRevokeRole = async (userId: string, role: "admin" | "moderator" | "super_admin" | "user") => {
     if (role === "user") return; // can't revoke base user role
     try {
       const { error } = await supabase
@@ -233,17 +253,16 @@ export default function SuperadminDashboard() {
   const handleUpdateSetting = async (settingKey: string, newValue: any) => {
     try {
       const { error } = await supabase
-        .from("system_settings")
-        .update({ setting_value: newValue, updated_by: user?.id, updated_at: new Date().toISOString() })
-        .eq("setting_key", settingKey);
+        .from("app_settings")
+        .upsert({ key: settingKey, value: typeof newValue === "string" ? newValue : JSON.stringify(newValue) }, { onConflict: "key" });
       if (error) throw error;
 
       await supabase.from("audit_logs").insert({
         actor_id: user?.id,
         action: "update_setting",
-        entity_type: "system_setting",
-        entity_id: null,
-        metadata: { setting_key: settingKey, new_value: newValue },
+        entity_type: "app_setting",
+        entity_id: settingKey,
+        metadata: { new_value: newValue },
       });
 
       toast.success("Setting updated");
@@ -486,16 +505,15 @@ export default function SuperadminDashboard() {
                 ) : (
                   settings.map((s) => (
                     <div
-                      key={s.id}
-                      onClick={() => { setSelectedSetting(s); setSettingValue(JSON.stringify(s.setting_value, null, 2)); }}
+                      key={s.key}
+                      onClick={() => { setSelectedSetting(s); setSettingValue(s.value ?? ""); }}
                       className="cursor-pointer rounded-lg border border-border bg-card p-4 hover:bg-accent/40 transition-colors"
                     >
                       <div className="flex items-center justify-between">
                         <div className="min-w-0">
-                          <h3 className="font-mono text-sm font-semibold text-foreground">{s.setting_key}</h3>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
+                          <h3 className="font-mono text-sm font-semibold text-foreground">{s.key}</h3>
                           <p className="mt-1 rounded bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground inline-block">
-                            {JSON.stringify(s.setting_value)}
+                            {s.value}
                           </p>
                         </div>
                         <Settings className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -509,9 +527,8 @@ export default function SuperadminDashboard() {
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-xl">
                       <h2 className="text-base font-bold text-foreground">
-                        Edit: <span className="font-mono">{selectedSetting.setting_key}</span>
+                        Edit: <span className="font-mono">{selectedSetting.key}</span>
                       </h2>
-                      <p className="mt-1 text-xs text-muted-foreground">{selectedSetting.description}</p>
                       <textarea
                         value={settingValue}
                         onChange={(e) => setSettingValue(e.target.value)}
@@ -519,13 +536,7 @@ export default function SuperadminDashboard() {
                       />
                       <div className="mt-4 flex gap-2">
                         <button
-                          onClick={() => {
-                            try {
-                              handleUpdateSetting(selectedSetting.setting_key, JSON.parse(settingValue));
-                            } catch {
-                              toast.error("Invalid JSON value");
-                            }
-                          }}
+                          onClick={() => handleUpdateSetting(selectedSetting.key, settingValue)}
                           className="flex-1 rounded-full bg-primary py-2 text-sm font-semibold text-primary-foreground"
                         >
                           Save

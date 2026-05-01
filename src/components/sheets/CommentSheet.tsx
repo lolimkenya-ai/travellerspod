@@ -18,8 +18,8 @@ interface Props {
 interface DbComment {
   id: string;
   post_id: string;
-  user_id: string;
-  content: string;
+  author_id: string;
+  body: string;
   created_at: string;
   author: {
     nametag: string;
@@ -39,10 +39,10 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
   const refresh = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("comments")
+      .from("post_comments")
       .select(
-        `id, post_id, user_id, content, created_at,
-         author:profiles!comments_user_id_fkey ( nametag, display_name, avatar_url )`,
+        `id, post_id, author_id, body, created_at,
+         author:profiles!post_comments_author_id_fkey ( nametag, display_name, avatar_url )`,
       )
       .eq("post_id", post.id)
       .order("created_at", { ascending: false })
@@ -56,10 +56,10 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
     if (!open) return;
     refresh();
     const ch = supabase
-      .channel(`comments:${post.id}`)
+      .channel(`post_comments:${post.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "comments", filter: `post_id=eq.${post.id}` },
+        { event: "*", schema: "public", table: "post_comments", filter: `post_id=eq.${post.id}` },
         () => refresh(),
       )
       .subscribe();
@@ -75,15 +75,15 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
       if (!user) return;
       if (!clientCooldown(`comment-${post.id}`, 600)) return;
       setPosting(true);
-      const ok = await rateLimit("comment", 20, 3600); // 20 comments per hour
+      const ok = await rateLimit("comment", 20, 3600);
       if (!ok) {
         setPosting(false);
         return;
       }
-      const { error } = await supabase.from("comments").insert({
+      const { error } = await supabase.from("post_comments").insert({
         post_id: post.id,
-        user_id: user.id,
-        content: body,
+        author_id: user.id,
+        body,
       });
       setPosting(false);
       if (error) {
@@ -146,7 +146,6 @@ function CommentRow({ comment }: { comment: DbComment }) {
   const { user, promptSignUp } = useAuth();
   const [liked, setLiked] = useState(false);
 
-  // Optimistic only — comment likes table is not modeled yet; keep as UI-only.
   const onLike = () => {
     if (!user) return promptSignUp();
     setLiked((l) => !l);
@@ -154,7 +153,7 @@ function CommentRow({ comment }: { comment: DbComment }) {
 
   const avatar =
     comment.author?.avatar_url ??
-    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(comment.author?.display_name ?? comment.user_id)}`;
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(comment.author?.display_name ?? comment.author_id)}`;
 
   return (
     <div className="border-b border-border/50">
@@ -165,7 +164,7 @@ function CommentRow({ comment }: { comment: DbComment }) {
             <span className="font-semibold text-foreground">@{comment.author?.nametag ?? "user"}</span>
             <span>{timeAgo(comment.created_at)}</span>
           </div>
-          <p className="mt-1 whitespace-pre-line text-sm text-foreground">{comment.content}</p>
+          <p className="mt-1 whitespace-pre-line text-sm text-foreground">{comment.body}</p>
 
           <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
             <button
@@ -173,7 +172,6 @@ function CommentRow({ comment }: { comment: DbComment }) {
               className={cn("flex items-center gap-1", liked && "text-primary")}
             >
               <Heart className={cn("h-3.5 w-3.5", liked && "fill-primary")} />
-              {/* Like count removed for comments as it's not yet in the DB schema for simplicity */}
             </button>
             <button className="flex items-center gap-1 hover:text-foreground">
               <MessageCircle className="h-3.5 w-3.5" />

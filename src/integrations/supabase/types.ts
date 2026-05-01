@@ -682,6 +682,7 @@ export type Database = {
           removed_at: string | null
           removed_by: string | null
           saves_count: number
+          search_vector: unknown
           text_background: string | null
           text_foreground: string | null
           updated_at: string
@@ -706,6 +707,7 @@ export type Database = {
           removed_at?: string | null
           removed_by?: string | null
           saves_count?: number
+          search_vector?: unknown
           text_background?: string | null
           text_foreground?: string | null
           updated_at?: string
@@ -730,6 +732,7 @@ export type Database = {
           removed_at?: string | null
           removed_by?: string | null
           saves_count?: number
+          search_vector?: unknown
           text_background?: string | null
           text_foreground?: string | null
           updated_at?: string
@@ -770,6 +773,7 @@ export type Database = {
           followers_count: number
           following_count: number
           id: string
+          is_verified: boolean | null
           nametag: string
           settings_completed: boolean
           updated_at: string
@@ -787,6 +791,7 @@ export type Database = {
           followers_count?: number
           following_count?: number
           id: string
+          is_verified?: boolean | null
           nametag: string
           settings_completed?: boolean
           updated_at?: string
@@ -804,6 +809,7 @@ export type Database = {
           followers_count?: number
           following_count?: number
           id?: string
+          is_verified?: boolean | null
           nametag?: string
           settings_completed?: boolean
           updated_at?: string
@@ -1208,6 +1214,8 @@ export type Database = {
         Args: { _flagged: boolean; _reason?: string; _user: string }
         Returns: undefined
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       start_dm: {
         Args: { _is_inquiry?: boolean; _other: string }
         Returns: string

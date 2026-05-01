@@ -1,19 +1,13 @@
 import { Feed } from "@/components/feed/Feed";
 import { useCategoryFilter } from "@/contexts/CategoryContext";
-import { useFairViewFeed, usePreferenceLearning } from "@/hooks/useAdvancedAI";
-import { Loader2, Sparkles } from "lucide-react";
-import { useEffect } from "react";
+import { usePosts } from "@/hooks/usePosts";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Discover() {
   const { user } = useAuth();
   const { active } = useCategoryFilter();
-  const { posts, loading, loadFeed, distribution } = useFairViewFeed();
-  const { preferences } = usePreferenceLearning();
-
-  useEffect(() => {
-    loadFeed(active === "All" ? undefined : active, preferences);
-  }, [active, loadFeed, preferences]);
+  const { posts, loading } = usePosts({ scope: "discover", categoryLabel: active });
 
   if (loading && posts.length === 0) {
     return (
@@ -25,21 +19,11 @@ export default function Discover() {
 
   return (
     <div className="relative">
-      {distribution.unviewed > 0 && (
-        <div className="sticky top-0 z-20 flex justify-center py-2 pointer-events-none">
-          <div className="flex items-center gap-1.5 rounded-full bg-primary/90 px-3 py-1 text-[10px] font-medium text-primary-foreground shadow-lg backdrop-blur-sm">
-            <Sparkles className="h-3 w-3" />
-            AI Optimized Feed
-          </div>
-        </div>
-      )}
-
       {!user && (
         <div className="px-4 py-2 text-center text-sm text-muted-foreground">
-          SafiriPod helps travelers discover, plan, and share their travel experiences.
+          Travellerspod helps travelers discover, plan, and share real travel experiences.
         </div>
       )}
-      
       <Feed
         posts={posts}
         emptyTitle={`No posts in ${active}`}
