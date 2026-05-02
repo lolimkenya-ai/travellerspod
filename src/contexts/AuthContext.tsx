@@ -235,17 +235,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signInWithGoogle: async () => {
       try {
-        console.log("🚀 Attempting Google sign-in");
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: `${window.location.origin}/`,
-          },
+        console.log("🚀 Attempting Google sign-in (managed)");
+        const { lovable } = await import("@/integrations/lovable/index");
+        const result = await lovable.auth.signInWithOAuth("google", {
+          redirect_uri: window.location.origin,
         });
-        if (error) {
-          console.error("❌ Google sign-in error:", error);
+        if (result.error) {
+          console.error("❌ Google sign-in error:", result.error);
           toast.error("Failed to sign in with Google.");
+          return;
         }
+        if (result.redirected) return;
       } catch (err) {
         console.error("❌ Unexpected Google sign-in error:", err);
         toast.error("An unexpected error occurred.");
