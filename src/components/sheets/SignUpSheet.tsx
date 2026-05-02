@@ -1,8 +1,16 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
-import { Mail, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { Mail, Loader2, ExternalLink } from "lucide-react";
+import { useState, useMemo } from "react";
 import { z } from "zod";
+import { toast } from "sonner";
+
+/** Detect common in-app browsers (Telegram, WhatsApp, Instagram, FB, Line, etc.) where Google OAuth gets stuck. */
+function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|Line|Twitter|WhatsApp|Telegram|TikTok|Snapchat|MicroMessenger|MiuiBrowser|; wv\)/i.test(ua);
+}
 
 const credSchema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255),
