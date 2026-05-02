@@ -695,6 +695,18 @@ function UserManagementRow({
                 <ShieldOff className="h-3 w-3" /> −Mod
               </button>
             )}
+            <button
+              onClick={() => onToggleFlag(user.id, user.flagged_danger)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold",
+                user.flagged_danger
+                  ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                  : "bg-muted text-muted-foreground hover:bg-accent"
+              )}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {user.flagged_danger ? "Unflag" : "Flag"}
+            </button>
           </div>
         )}
       </div>
