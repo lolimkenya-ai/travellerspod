@@ -206,47 +206,45 @@ export default function SuperadminDashboard() {
 
   const handleAssignRole = async (userId: string, role: "admin" | "moderator" | "super_admin" | "user") => {
     try {
-      const { error } = await supabase
-        .from("user_roles")
-        .upsert({ user_id: userId, role }, { onConflict: "user_id,role" });
+      const { error } = await supabase.rpc("grant_role", { _user_id: userId, _role: role });
       if (error) throw error;
-
-      // Audit log
-      await supabase.from("audit_logs").insert({
-        actor_id: user?.id,
-        action: `assign_role:${role}`,
-        entity_type: "user",
-        entity_id: userId,
-      });
-
       toast.success(`Role "${role}" assigned`);
       fetchUsers(userSearch);
+      fetchAuditLogs();
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to assign role");
     }
   };
 
   const handleRevokeRole = async (userId: string, role: "admin" | "moderator" | "super_admin" | "user") => {
-    if (role === "user") return; // can't revoke base user role
+    if (role === "user") return;
     try {
-      const { error } = await supabase
-        .from("user_roles")
-        .delete()
-        .eq("user_id", userId)
-        .eq("role", role);
+      const { error } = await supabase.rpc("revoke_role", { _user_id: userId, _role: role });
       if (error) throw error;
-
-      await supabase.from("audit_logs").insert({
-        actor_id: user?.id,
-        action: `revoke_role:${role}`,
-        entity_type: "user",
-        entity_id: userId,
-      });
-
       toast.success(`Role "${role}" revoked`);
       fetchUsers(userSearch);
+      fetchAuditLogs();
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to revoke role");
+    }
+  };
+
+  const handleToggleFlag = async (userId: string, currentlyFlagged: boolean) => {
+    try {
+      const reason = currentlyFlagged
+        ? null
+        : window.prompt("Reason for flagging this user?") || "manual review";
+      const { error } = await supabase.rpc("set_user_flag", {
+        _user_id: userId,
+        _flagged: !currentlyFlagged,
+        _reason: reason,
+      });
+      if (error) throw error;
+      toast.success(currentlyFlagged ? "User unflagged" : "User flagged");
+      fetchUsers(userSearch);
+      fetchAuditLogs();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to update flag");
     }
   };
 
@@ -257,16 +255,16 @@ export default function SuperadminDashboard() {
         .upsert({ key: settingKey, value: typeof newValue === "string" ? newValue : JSON.stringify(newValue) }, { onConflict: "key" });
       if (error) throw error;
 
-      await supabase.from("audit_logs").insert({
-        actor_id: user?.id,
-        action: "update_setting",
-        entity_type: "app_setting",
-        entity_id: settingKey,
-        metadata: { new_value: newValue },
+      await supabase.rpc("log_admin_action", {
+        _action: "update_setting",
+        _entity_type: "app_setting",
+        _entity_id: settingKey,
+        _metadata: { new_value: newValue },
       });
 
       toast.success("Setting updated");
       fetchSettings();
+      fetchAuditLogs();
       setSelectedSetting(null);
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to update setting");
@@ -405,6 +403,7 @@ export default function SuperadminDashboard() {
                       currentUserId={user?.id ?? ""}
                       onAssignRole={handleAssignRole}
                       onRevokeRole={handleRevokeRole}
+                      onToggleFlag={handleToggleFlag}
                     />
                   ))}
                   {managedUsers.length === 0 && (
@@ -477,20 +476,37 @@ export default function SuperadminDashboard() {
 
             {/* ── FLAGS ── */}
             {activeTab === "flags" && (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-border bg-card p-4 text-center">
-                  <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
-                  <p className="text-sm text-foreground font-semibold">User Flags</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Flag management is available in the Reports queue.
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">
+                    Flagged users ({managedUsers.filter((u) => u.flagged_danger).length})
                   </p>
                   <button
                     onClick={() => navigate("/access/reports")}
-                    className="mt-3 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
                   >
-                    Go to Reports
+                    Open reports queue
                   </button>
                 </div>
+                {managedUsers.filter((u) => u.flagged_danger).length === 0 ? (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center">
+                    <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
+                    <p className="text-sm text-muted-foreground">No flagged users in current page.</p>
+                  </div>
+                ) : (
+                  managedUsers
+                    .filter((u) => u.flagged_danger)
+                    .map((u) => (
+                      <UserManagementRow
+                        key={u.id}
+                        user={u}
+                        currentUserId={user?.id ?? ""}
+                        onAssignRole={handleAssignRole}
+                        onRevokeRole={handleRevokeRole}
+                        onToggleFlag={handleToggleFlag}
+                      />
+                    ))
+                )}
               </div>
             )}
 
@@ -592,11 +608,13 @@ function UserManagementRow({
   currentUserId,
   onAssignRole,
   onRevokeRole,
+  onToggleFlag,
 }: {
   user: ManagedUser;
   currentUserId: string;
   onAssignRole: (id: string, role: string) => void;
   onRevokeRole: (id: string, role: string) => void;
+  onToggleFlag: (id: string, currentlyFlagged: boolean) => void;
 }) {
   const isSelf = user.id === currentUserId;
   const hasAdmin = user.roles.includes("admin") || user.roles.includes("super_admin");
@@ -677,6 +695,18 @@ function UserManagementRow({
                 <ShieldOff className="h-3 w-3" /> −Mod
               </button>
             )}
+            <button
+              onClick={() => onToggleFlag(user.id, user.flagged_danger)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold",
+                user.flagged_danger
+                  ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                  : "bg-muted text-muted-foreground hover:bg-accent"
+              )}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {user.flagged_danger ? "Unflag" : "Flag"}
+            </button>
           </div>
         )}
       </div>

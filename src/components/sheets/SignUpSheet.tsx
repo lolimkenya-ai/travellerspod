@@ -1,8 +1,16 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
-import { Mail, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { Mail, Loader2, ExternalLink } from "lucide-react";
+import { useState, useMemo } from "react";
 import { z } from "zod";
+import { toast } from "sonner";
+
+/** Detect common in-app browsers (Telegram, WhatsApp, Instagram, FB, Line, etc.) where Google OAuth gets stuck. */
+function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|Line|Twitter|WhatsApp|Telegram|TikTok|Snapchat|MicroMessenger|MiuiBrowser|; wv\)/i.test(ua);
+}
 
 const credSchema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255),
@@ -21,6 +29,19 @@ export function SignUpSheet() {
   const [accountType, setAccountType] = useState<"personal" | "business" | "organization">("personal");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const inApp = useMemo(() => isInAppBrowser(), []);
+
+  function handleGoogle() {
+    if (inApp) {
+      try { navigator.clipboard?.writeText(window.location.href); } catch { /* noop */ }
+      toast.error("Open in your browser", {
+        description: "Google sign-in doesn't work in in-app browsers. Tap the ⋮ menu → 'Open in browser' (link copied).",
+        duration: 8000,
+      });
+      return;
+    }
+    signInWithGoogle();
+  }
 
   function reset() {
     setMode("choose");
@@ -138,8 +159,19 @@ export function SignUpSheet() {
 
           {mode === "choose" ? (
             <div className="flex flex-col gap-3">
+              {inApp && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+                  <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Open in your browser to sign in with Google</p>
+                    <p className="mt-0.5 opacity-90">
+                      You're using an in-app browser. Tap the ⋮ menu and choose "Open in browser" — or use email sign-in below.
+                    </p>
+                  </div>
+                </div>
+              )}
               <button
-                onClick={() => signInWithGoogle()}
+                onClick={handleGoogle}
                 className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-background py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
               >
                 <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">

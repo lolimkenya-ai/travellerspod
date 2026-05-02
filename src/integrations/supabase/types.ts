@@ -1154,6 +1154,13 @@ export type Database = {
           flagged_danger: boolean
         }[]
       }
+      grant_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1173,6 +1180,15 @@ export type Database = {
       is_conversation_member: {
         Args: { _conv: string; _user: string }
         Returns: boolean
+      }
+      log_admin_action: {
+        Args: {
+          _action: string
+          _entity_id?: string
+          _entity_type?: string
+          _metadata?: Json
+        }
+        Returns: string
       }
       log_audit: {
         Args: {
@@ -1200,6 +1216,13 @@ export type Database = {
         Returns: string
       }
       restore_post: { Args: { _post_id: string }; Returns: undefined }
+      revoke_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: undefined
+      }
       save_ai_verification_review: {
         Args: {
           _findings: Json
@@ -1212,6 +1235,10 @@ export type Database = {
       }
       set_user_danger: {
         Args: { _flagged: boolean; _reason?: string; _user: string }
+        Returns: undefined
+      }
+      set_user_flag: {
+        Args: { _flagged: boolean; _reason?: string; _user_id: string }
         Returns: undefined
       }
       show_limit: { Args: never; Returns: number }
