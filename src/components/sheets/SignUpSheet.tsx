@@ -160,7 +160,7 @@ export function SignUpSheet() {
           {mode === "choose" ? (
             <div className="flex flex-col gap-3">
               <button
-                onClick={() => signInWithGoogle()}
+                onClick={handleGoogle}
                 className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-background py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
               >
                 <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
