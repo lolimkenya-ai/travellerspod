@@ -403,6 +403,7 @@ export default function SuperadminDashboard() {
                       currentUserId={user?.id ?? ""}
                       onAssignRole={handleAssignRole}
                       onRevokeRole={handleRevokeRole}
+                      onToggleFlag={handleToggleFlag}
                     />
                   ))}
                   {managedUsers.length === 0 && (
@@ -475,20 +476,37 @@ export default function SuperadminDashboard() {
 
             {/* ── FLAGS ── */}
             {activeTab === "flags" && (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-border bg-card p-4 text-center">
-                  <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
-                  <p className="text-sm text-foreground font-semibold">User Flags</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Flag management is available in the Reports queue.
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">
+                    Flagged users ({managedUsers.filter((u) => u.flagged_danger).length})
                   </p>
                   <button
                     onClick={() => navigate("/access/reports")}
-                    className="mt-3 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
                   >
-                    Go to Reports
+                    Open reports queue
                   </button>
                 </div>
+                {managedUsers.filter((u) => u.flagged_danger).length === 0 ? (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center">
+                    <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
+                    <p className="text-sm text-muted-foreground">No flagged users in current page.</p>
+                  </div>
+                ) : (
+                  managedUsers
+                    .filter((u) => u.flagged_danger)
+                    .map((u) => (
+                      <UserManagementRow
+                        key={u.id}
+                        user={u}
+                        currentUserId={user?.id ?? ""}
+                        onAssignRole={handleAssignRole}
+                        onRevokeRole={handleRevokeRole}
+                        onToggleFlag={handleToggleFlag}
+                      />
+                    ))
+                )}
               </div>
             )}
 
@@ -590,11 +608,13 @@ function UserManagementRow({
   currentUserId,
   onAssignRole,
   onRevokeRole,
+  onToggleFlag,
 }: {
   user: ManagedUser;
   currentUserId: string;
   onAssignRole: (id: string, role: string) => void;
   onRevokeRole: (id: string, role: string) => void;
+  onToggleFlag: (id: string, currentlyFlagged: boolean) => void;
 }) {
   const isSelf = user.id === currentUserId;
   const hasAdmin = user.roles.includes("admin") || user.roles.includes("super_admin");
