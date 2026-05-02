@@ -159,6 +159,17 @@ export function SignUpSheet() {
 
           {mode === "choose" ? (
             <div className="flex flex-col gap-3">
+              {inApp && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+                  <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Open in your browser to sign in with Google</p>
+                    <p className="mt-0.5 opacity-90">
+                      You're using an in-app browser. Tap the ⋮ menu and choose "Open in browser" — or use email sign-in below.
+                    </p>
+                  </div>
+                </div>
+              )}
               <button
                 onClick={handleGoogle}
                 className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-background py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
