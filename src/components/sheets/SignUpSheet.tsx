@@ -29,6 +29,19 @@ export function SignUpSheet() {
   const [accountType, setAccountType] = useState<"personal" | "business" | "organization">("personal");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const inApp = useMemo(() => isInAppBrowser(), []);
+
+  function handleGoogle() {
+    if (inApp) {
+      try { navigator.clipboard?.writeText(window.location.href); } catch { /* noop */ }
+      toast.error("Open in your browser", {
+        description: "Google sign-in doesn't work in in-app browsers. Tap the ⋮ menu → 'Open in browser' (link copied).",
+        duration: 8000,
+      });
+      return;
+    }
+    signInWithGoogle();
+  }
 
   function reset() {
     setMode("choose");
