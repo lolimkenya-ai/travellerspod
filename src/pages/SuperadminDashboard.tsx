@@ -74,8 +74,33 @@ interface ManagedUser {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-const TABS = ["overview", "users", "audit", "flags", "settings"] as const;
+const TABS = ["overview", "moderation", "reports", "users", "audit", "flags", "settings"] as const;
 type Tab = typeof TABS[number];
+
+interface ModPost {
+  id: string;
+  author_id: string;
+  media_type: string;
+  media_url: string | null;
+  poster_url: string | null;
+  caption: string | null;
+  removed_at: string | null;
+  removal_reason: string | null;
+  created_at: string;
+  author?: { display_name: string; nametag: string; avatar_url: string | null } | null;
+}
+
+interface ContentReport {
+  id: string;
+  reporter_id: string;
+  post_id: string | null;
+  comment_id: string | null;
+  reason: string;
+  details: string | null;
+  status: string;
+  created_at: string;
+  resolution_note: string | null;
+}
 
 export default function SuperadminDashboard() {
   const navigate = useNavigate();
