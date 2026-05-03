@@ -12,6 +12,9 @@ import {
   Clock,
   Search,
   Trash2,
+  RotateCcw,
+  Video,
+  Image as ImageIcon,
   MessageSquare,
   Crown,
   Shield,
@@ -71,8 +74,33 @@ interface ManagedUser {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-const TABS = ["overview", "users", "audit", "flags", "settings"] as const;
+const TABS = ["overview", "moderation", "reports", "users", "audit", "flags", "settings"] as const;
 type Tab = typeof TABS[number];
+
+interface ModPost {
+  id: string;
+  author_id: string;
+  media_type: string;
+  media_url: string | null;
+  poster_url: string | null;
+  caption: string | null;
+  removed_at: string | null;
+  removal_reason: string | null;
+  created_at: string;
+  author?: { display_name: string; nametag: string; avatar_url: string | null } | null;
+}
+
+interface ContentReport {
+  id: string;
+  reporter_id: string;
+  post_id: string | null;
+  comment_id: string | null;
+  reason: string;
+  details: string | null;
+  status: string;
+  created_at: string;
+  resolution_note: string | null;
+}
 
 export default function SuperadminDashboard() {
   const navigate = useNavigate();
@@ -89,6 +117,10 @@ export default function SuperadminDashboard() {
   const [selectedSetting, setSelectedSetting] = useState<any>(null);
   const [settingValue, setSettingValue] = useState("");
   const [settings, setSettings] = useState<any[]>([]);
+  const [modPosts, setModPosts] = useState<ModPost[]>([]);
+  const [modFilter, setModFilter] = useState<"active" | "removed">("active");
+  const [reports, setReports] = useState<ContentReport[]>([]);
+  const [reportFilter, setReportFilter] = useState<"open" | "resolved">("open");
 
   // Redirect if not super admin (once roles resolved)
   useEffect(() => {
@@ -192,15 +224,63 @@ export default function SuperadminDashboard() {
     }
   }, []);
 
+  const fetchModPosts = useCallback(async (filter: "active" | "removed") => {
+    try {
+      let query = supabase
+        .from("posts")
+        .select("id, author_id, media_type, media_url, poster_url, caption, removed_at, removal_reason, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (filter === "active") query = query.is("removed_at", null);
+      else query = query.not("removed_at", "is", null);
+      const { data, error } = await query;
+      if (error) throw error;
+      const ids = Array.from(new Set((data ?? []).map((p) => p.author_id)));
+      const { data: authors } = ids.length
+        ? await supabase.from("profiles").select("id, display_name, nametag, avatar_url").in("id", ids)
+        : { data: [] };
+      const aMap = new Map((authors ?? []).map((a: any) => [a.id, a]));
+      setModPosts((data ?? []).map((p: any) => ({ ...p, author: aMap.get(p.author_id) ?? null })));
+    } catch (err) {
+      console.error("Failed to fetch posts:", err);
+    }
+  }, []);
+
+  const fetchReports = useCallback(async (filter: "open" | "resolved") => {
+    try {
+      const statuses = filter === "open" ? ["open", "reviewing"] as const : ["actioned", "dismissed"] as const;
+      const { data, error } = await supabase
+        .from("content_reports")
+        .select("*")
+        .in("status", statuses as any)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setReports((data as ContentReport[]) ?? []);
+    } catch (err) {
+      console.error("Failed to fetch reports:", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isSuperAdmin) return;
     const load = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchAuditLogs(), fetchUsers(), fetchSettings()]);
+      await Promise.all([
+        fetchStats(),
+        fetchAuditLogs(),
+        fetchUsers(),
+        fetchSettings(),
+        fetchModPosts("active"),
+        fetchReports("open"),
+      ]);
       setLoading(false);
     };
     load();
-  }, [isSuperAdmin, fetchStats, fetchAuditLogs, fetchUsers, fetchSettings]);
+  }, [isSuperAdmin, fetchStats, fetchAuditLogs, fetchUsers, fetchSettings, fetchModPosts, fetchReports]);
+
+  useEffect(() => { if (isSuperAdmin) fetchModPosts(modFilter); }, [modFilter, isSuperAdmin, fetchModPosts]);
+  useEffect(() => { if (isSuperAdmin) fetchReports(reportFilter); }, [reportFilter, isSuperAdmin, fetchReports]);
 
   /* ---- Actions ---- */
 
@@ -268,6 +348,54 @@ export default function SuperadminDashboard() {
       setSelectedSetting(null);
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to update setting");
+    }
+  };
+
+  const handleRemovePost = async (postId: string) => {
+    const reason = window.prompt("Reason for removing this post?", "Violates community guidelines");
+    if (reason === null) return;
+    try {
+      const { error } = await supabase.rpc("remove_post", { _post_id: postId, _reason: reason });
+      if (error) throw error;
+      toast.success("Post removed");
+      fetchModPosts(modFilter);
+      fetchStats();
+      fetchAuditLogs();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to remove post");
+    }
+  };
+
+  const handleRestorePost = async (postId: string) => {
+    try {
+      const { error } = await supabase.rpc("restore_post", { _post_id: postId });
+      if (error) throw error;
+      toast.success("Post restored");
+      fetchModPosts(modFilter);
+      fetchStats();
+      fetchAuditLogs();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to restore post");
+    }
+  };
+
+  const handleResolveReport = async (reportId: string, removePost: boolean) => {
+    const note = window.prompt(removePost ? "Resolution note (will also remove the post):" : "Resolution note:", "");
+    if (note === null) return;
+    try {
+      const { error } = await supabase.rpc("resolve_report", {
+        _report_id: reportId,
+        _note: note || null,
+        _remove_post: removePost,
+      });
+      if (error) throw error;
+      toast.success("Report resolved");
+      fetchReports(reportFilter);
+      fetchModPosts(modFilter);
+      fetchStats();
+      fetchAuditLogs();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to resolve report");
     }
   };
 
@@ -369,6 +497,123 @@ export default function SuperadminDashboard() {
                       </span>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── MODERATION ── */}
+            {activeTab === "moderation" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-border p-0.5">
+                    {(["active", "removed"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setModFilter(f)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-semibold capitalize",
+                          modFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => fetchModPosts(modFilter)}
+                    className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-accent"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {modPosts.map((p) => (
+                    <ModPostCard
+                      key={p.id}
+                      post={p}
+                      onRemove={() => handleRemovePost(p.id)}
+                      onRestore={() => handleRestorePost(p.id)}
+                      onView={() => navigate(`/post/${p.id}`)}
+                    />
+                  ))}
+                  {modPosts.length === 0 && (
+                    <p className="col-span-full py-8 text-center text-sm text-muted-foreground">No posts</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── REPORTS ── */}
+            {activeTab === "reports" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-border p-0.5">
+                    {(["open", "resolved"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setReportFilter(f)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-semibold capitalize",
+                          reportFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => fetchReports(reportFilter)}
+                    className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-accent"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {reports.map((r) => (
+                    <div key={r.id} className="rounded-lg border border-border bg-card p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+                              {r.reason}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{timeAgo(r.created_at)}</span>
+                          </div>
+                          {r.details && <p className="mt-2 text-sm text-foreground">{r.details}</p>}
+                          {r.resolution_note && (
+                            <p className="mt-1 text-xs text-muted-foreground">Resolution: {r.resolution_note}</p>
+                          )}
+                          {r.post_id && (
+                            <button
+                              onClick={() => navigate(`/post/${r.post_id}`)}
+                              className="mt-2 text-xs text-primary hover:underline"
+                            >
+                              View reported post →
+                            </button>
+                          )}
+                        </div>
+                        {reportFilter === "open" && (
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={() => handleResolveReport(r.id, true)}
+                              className="rounded-full bg-destructive px-3 py-1 text-[10px] font-semibold text-destructive-foreground hover:opacity-90"
+                            >
+                              Remove & resolve
+                            </button>
+                            <button
+                              onClick={() => handleResolveReport(r.id, false)}
+                              className="rounded-full border border-border px-3 py-1 text-[10px] font-semibold text-foreground hover:bg-accent"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {reports.length === 0 && (
+                    <p className="py-8 text-center text-sm text-muted-foreground">No reports</p>
+                  )}
                 </div>
               </div>
             )}
@@ -715,3 +960,103 @@ function UserManagementRow({
 }
 
 
+
+function ModPostCard({
+  post,
+  onRemove,
+  onRestore,
+  onView,
+}: {
+  post: ModPost;
+  onRemove: () => void;
+  onRestore: () => void;
+  onView: () => void;
+}) {
+  const isRemoved = !!post.removed_at;
+  const isVideo = post.media_type === "video";
+  const isImage = post.media_type === "image";
+  const thumb = post.poster_url ?? (isImage ? post.media_url : null);
+
+  return (
+    <div className={cn(
+      "overflow-hidden rounded-xl border border-border bg-card",
+      isRemoved && "opacity-60"
+    )}>
+      <div className="relative aspect-video bg-muted">
+        {isVideo && post.media_url ? (
+          <video
+            src={post.media_url}
+            poster={post.poster_url ?? undefined}
+            controls
+            preload="metadata"
+            className="h-full w-full object-cover"
+          />
+        ) : thumb ? (
+          <img src={thumb} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+            Text post
+          </div>
+        )}
+        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-[10px] font-semibold text-foreground">
+          {isVideo ? <Video className="h-3 w-3" /> : isImage ? <ImageIcon className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+          {post.media_type}
+        </span>
+        {isRemoved && (
+          <span className="absolute right-2 top-2 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-semibold text-destructive-foreground">
+            Removed
+          </span>
+        )}
+      </div>
+      <div className="p-3">
+        <div className="flex items-center gap-2">
+          <img
+            src={
+              post.author?.avatar_url ??
+              `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(post.author?.display_name ?? "U")}`
+            }
+            alt=""
+            className="h-7 w-7 rounded-full object-cover"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-foreground">
+              {post.author?.display_name ?? "Unknown"}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">
+              @{post.author?.nametag ?? "?"} · {timeAgo(post.created_at)}
+            </p>
+          </div>
+        </div>
+        {post.caption && (
+          <p className="mt-2 line-clamp-2 text-xs text-foreground">{post.caption}</p>
+        )}
+        {post.removal_reason && (
+          <p className="mt-1 text-[10px] text-destructive">Reason: {post.removal_reason}</p>
+        )}
+        <div className="mt-3 flex gap-1.5">
+          <button
+            onClick={onView}
+            className="flex-1 rounded-full border border-border py-1.5 text-[11px] font-semibold text-foreground hover:bg-accent"
+          >
+            View
+          </button>
+          {isRemoved ? (
+            <button
+              onClick={onRestore}
+              className="flex-1 inline-flex items-center justify-center gap-1 rounded-full bg-primary py-1.5 text-[11px] font-semibold text-primary-foreground hover:opacity-90"
+            >
+              <RotateCcw className="h-3 w-3" /> Restore
+            </button>
+          ) : (
+            <button
+              onClick={onRemove}
+              className="flex-1 inline-flex items-center justify-center gap-1 rounded-full bg-destructive py-1.5 text-[11px] font-semibold text-destructive-foreground hover:opacity-90"
+            >
+              <Trash2 className="h-3 w-3" /> Remove
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
