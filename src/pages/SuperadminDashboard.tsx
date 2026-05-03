@@ -248,10 +248,11 @@ export default function SuperadminDashboard() {
 
   const fetchReports = useCallback(async (filter: "open" | "resolved") => {
     try {
+      const statuses = filter === "open" ? ["open", "reviewing"] as const : ["actioned", "dismissed"] as const;
       const { data, error } = await supabase
         .from("content_reports")
         .select("*")
-        .eq("status", filter)
+        .in("status", statuses as any)
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
