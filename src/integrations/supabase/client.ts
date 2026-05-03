@@ -12,92 +12,9 @@ const SUPABASE_ANON_KEY =
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Custom storage implementation with fallback
-class RobustStorage implements Storage {
-  private prefix = 'supabase-';
-
-  getItem(key: string): string | null {
-    try {
-      // Try localStorage first
-      const value = localStorage.getItem(this.prefix + key);
-      if (value) return value;
-      
-      // Fallback to sessionStorage
-      const sessionValue = sessionStorage.getItem(this.prefix + key);
-      if (sessionValue) return sessionValue;
-      
-      return null;
-    } catch (e) {
-      console.warn('Error reading from storage:', e);
-      return null;
-    }
-  }
-
-  setItem(key: string, value: string): void {
-    try {
-      // Store in both localStorage and sessionStorage for redundancy
-      localStorage.setItem(this.prefix + key, value);
-      sessionStorage.setItem(this.prefix + key, value);
-    } catch (e) {
-      console.warn('Error writing to storage:', e);
-      // If localStorage fails, try sessionStorage only
-      try {
-        sessionStorage.setItem(this.prefix + key, value);
-      } catch (e2) {
-        console.error('Both storage mechanisms failed:', e2);
-      }
-    }
-  }
-
-  removeItem(key: string): void {
-    try {
-      localStorage.removeItem(this.prefix + key);
-      sessionStorage.removeItem(this.prefix + key);
-    } catch (e) {
-      console.warn('Error removing from storage:', e);
-    }
-  }
-
-  clear(): void {
-    try {
-      // Clear all prefixed items
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith(this.prefix)) {
-          localStorage.removeItem(key);
-        }
-      });
-      Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith(this.prefix)) {
-          sessionStorage.removeItem(key);
-        }
-      });
-    } catch (e) {
-      console.warn('Error clearing storage:', e);
-    }
-  }
-
-  key(index: number): string | null {
-    try {
-      return localStorage.key(index);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  get length(): number {
-    try {
-      return localStorage.length;
-    } catch (e) {
-      return 0;
-    }
-  }
-}
-
-const robustStorage = new RobustStorage();
-
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: robustStorage,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
