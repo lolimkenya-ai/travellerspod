@@ -224,15 +224,62 @@ export default function SuperadminDashboard() {
     }
   }, []);
 
+  const fetchModPosts = useCallback(async (filter: "active" | "removed") => {
+    try {
+      let query = supabase
+        .from("posts")
+        .select("id, author_id, media_type, media_url, poster_url, caption, removed_at, removal_reason, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (filter === "active") query = query.is("removed_at", null);
+      else query = query.not("removed_at", "is", null);
+      const { data, error } = await query;
+      if (error) throw error;
+      const ids = Array.from(new Set((data ?? []).map((p) => p.author_id)));
+      const { data: authors } = ids.length
+        ? await supabase.from("profiles").select("id, display_name, nametag, avatar_url").in("id", ids)
+        : { data: [] };
+      const aMap = new Map((authors ?? []).map((a: any) => [a.id, a]));
+      setModPosts((data ?? []).map((p: any) => ({ ...p, author: aMap.get(p.author_id) ?? null })));
+    } catch (err) {
+      console.error("Failed to fetch posts:", err);
+    }
+  }, []);
+
+  const fetchReports = useCallback(async (filter: "open" | "resolved") => {
+    try {
+      const { data, error } = await supabase
+        .from("content_reports")
+        .select("*")
+        .eq("status", filter)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setReports((data as ContentReport[]) ?? []);
+    } catch (err) {
+      console.error("Failed to fetch reports:", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isSuperAdmin) return;
     const load = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchAuditLogs(), fetchUsers(), fetchSettings()]);
+      await Promise.all([
+        fetchStats(),
+        fetchAuditLogs(),
+        fetchUsers(),
+        fetchSettings(),
+        fetchModPosts("active"),
+        fetchReports("open"),
+      ]);
       setLoading(false);
     };
     load();
-  }, [isSuperAdmin, fetchStats, fetchAuditLogs, fetchUsers, fetchSettings]);
+  }, [isSuperAdmin, fetchStats, fetchAuditLogs, fetchUsers, fetchSettings, fetchModPosts, fetchReports]);
+
+  useEffect(() => { if (isSuperAdmin) fetchModPosts(modFilter); }, [modFilter, isSuperAdmin, fetchModPosts]);
+  useEffect(() => { if (isSuperAdmin) fetchReports(reportFilter); }, [reportFilter, isSuperAdmin, fetchReports]);
 
   /* ---- Actions ---- */
 
