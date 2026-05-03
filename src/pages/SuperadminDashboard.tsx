@@ -351,6 +351,54 @@ export default function SuperadminDashboard() {
     }
   };
 
+  const handleRemovePost = async (postId: string) => {
+    const reason = window.prompt("Reason for removing this post?", "Violates community guidelines");
+    if (reason === null) return;
+    try {
+      const { error } = await supabase.rpc("remove_post", { _post_id: postId, _reason: reason });
+      if (error) throw error;
+      toast.success("Post removed");
+      fetchModPosts(modFilter);
+      fetchStats();
+      fetchAuditLogs();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to remove post");
+    }
+  };
+
+  const handleRestorePost = async (postId: string) => {
+    try {
+      const { error } = await supabase.rpc("restore_post", { _post_id: postId });
+      if (error) throw error;
+      toast.success("Post restored");
+      fetchModPosts(modFilter);
+      fetchStats();
+      fetchAuditLogs();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to restore post");
+    }
+  };
+
+  const handleResolveReport = async (reportId: string, removePost: boolean) => {
+    const note = window.prompt(removePost ? "Resolution note (will also remove the post):" : "Resolution note:", "");
+    if (note === null) return;
+    try {
+      const { error } = await supabase.rpc("resolve_report", {
+        _report_id: reportId,
+        _note: note || null,
+        _remove_post: removePost,
+      });
+      if (error) throw error;
+      toast.success("Report resolved");
+      fetchReports(reportFilter);
+      fetchModPosts(modFilter);
+      fetchStats();
+      fetchAuditLogs();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to resolve report");
+    }
+  };
+
   if (rolesLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
