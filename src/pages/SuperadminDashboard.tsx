@@ -960,3 +960,103 @@ function UserManagementRow({
 }
 
 
+
+function ModPostCard({
+  post,
+  onRemove,
+  onRestore,
+  onView,
+}: {
+  post: ModPost;
+  onRemove: () => void;
+  onRestore: () => void;
+  onView: () => void;
+}) {
+  const isRemoved = !!post.removed_at;
+  const isVideo = post.media_type === "video";
+  const isImage = post.media_type === "image";
+  const thumb = post.poster_url ?? (isImage ? post.media_url : null);
+
+  return (
+    <div className={cn(
+      "overflow-hidden rounded-xl border border-border bg-card",
+      isRemoved && "opacity-60"
+    )}>
+      <div className="relative aspect-video bg-muted">
+        {isVideo && post.media_url ? (
+          <video
+            src={post.media_url}
+            poster={post.poster_url ?? undefined}
+            controls
+            preload="metadata"
+            className="h-full w-full object-cover"
+          />
+        ) : thumb ? (
+          <img src={thumb} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+            Text post
+          </div>
+        )}
+        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-[10px] font-semibold text-foreground">
+          {isVideo ? <Video className="h-3 w-3" /> : isImage ? <ImageIcon className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+          {post.media_type}
+        </span>
+        {isRemoved && (
+          <span className="absolute right-2 top-2 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-semibold text-destructive-foreground">
+            Removed
+          </span>
+        )}
+      </div>
+      <div className="p-3">
+        <div className="flex items-center gap-2">
+          <img
+            src={
+              post.author?.avatar_url ??
+              `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(post.author?.display_name ?? "U")}`
+            }
+            alt=""
+            className="h-7 w-7 rounded-full object-cover"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-foreground">
+              {post.author?.display_name ?? "Unknown"}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">
+              @{post.author?.nametag ?? "?"} · {timeAgo(post.created_at)}
+            </p>
+          </div>
+        </div>
+        {post.caption && (
+          <p className="mt-2 line-clamp-2 text-xs text-foreground">{post.caption}</p>
+        )}
+        {post.removal_reason && (
+          <p className="mt-1 text-[10px] text-destructive">Reason: {post.removal_reason}</p>
+        )}
+        <div className="mt-3 flex gap-1.5">
+          <button
+            onClick={onView}
+            className="flex-1 rounded-full border border-border py-1.5 text-[11px] font-semibold text-foreground hover:bg-accent"
+          >
+            View
+          </button>
+          {isRemoved ? (
+            <button
+              onClick={onRestore}
+              className="flex-1 inline-flex items-center justify-center gap-1 rounded-full bg-primary py-1.5 text-[11px] font-semibold text-primary-foreground hover:opacity-90"
+            >
+              <RotateCcw className="h-3 w-3" /> Restore
+            </button>
+          ) : (
+            <button
+              onClick={onRemove}
+              className="flex-1 inline-flex items-center justify-center gap-1 rounded-full bg-destructive py-1.5 text-[11px] font-semibold text-destructive-foreground hover:opacity-90"
+            >
+              <Trash2 className="h-3 w-3" /> Remove
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
