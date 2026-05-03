@@ -501,6 +501,123 @@ export default function SuperadminDashboard() {
               </div>
             )}
 
+            {/* ── MODERATION ── */}
+            {activeTab === "moderation" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-border p-0.5">
+                    {(["active", "removed"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setModFilter(f)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-semibold capitalize",
+                          modFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => fetchModPosts(modFilter)}
+                    className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-accent"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {modPosts.map((p) => (
+                    <ModPostCard
+                      key={p.id}
+                      post={p}
+                      onRemove={() => handleRemovePost(p.id)}
+                      onRestore={() => handleRestorePost(p.id)}
+                      onView={() => navigate(`/post/${p.id}`)}
+                    />
+                  ))}
+                  {modPosts.length === 0 && (
+                    <p className="col-span-full py-8 text-center text-sm text-muted-foreground">No posts</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── REPORTS ── */}
+            {activeTab === "reports" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-border p-0.5">
+                    {(["open", "resolved"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setReportFilter(f)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-semibold capitalize",
+                          reportFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => fetchReports(reportFilter)}
+                    className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-accent"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {reports.map((r) => (
+                    <div key={r.id} className="rounded-lg border border-border bg-card p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+                              {r.reason}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{timeAgo(r.created_at)}</span>
+                          </div>
+                          {r.details && <p className="mt-2 text-sm text-foreground">{r.details}</p>}
+                          {r.resolution_note && (
+                            <p className="mt-1 text-xs text-muted-foreground">Resolution: {r.resolution_note}</p>
+                          )}
+                          {r.post_id && (
+                            <button
+                              onClick={() => navigate(`/post/${r.post_id}`)}
+                              className="mt-2 text-xs text-primary hover:underline"
+                            >
+                              View reported post →
+                            </button>
+                          )}
+                        </div>
+                        {reportFilter === "open" && (
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={() => handleResolveReport(r.id, true)}
+                              className="rounded-full bg-destructive px-3 py-1 text-[10px] font-semibold text-destructive-foreground hover:opacity-90"
+                            >
+                              Remove & resolve
+                            </button>
+                            <button
+                              onClick={() => handleResolveReport(r.id, false)}
+                              className="rounded-full border border-border px-3 py-1 text-[10px] font-semibold text-foreground hover:bg-accent"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {reports.length === 0 && (
+                    <p className="py-8 text-center text-sm text-muted-foreground">No reports</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* ── USER MANAGEMENT ── */}
             {activeTab === "users" && (
               <div className="space-y-4">
