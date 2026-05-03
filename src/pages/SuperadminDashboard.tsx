@@ -117,6 +117,10 @@ export default function SuperadminDashboard() {
   const [selectedSetting, setSelectedSetting] = useState<any>(null);
   const [settingValue, setSettingValue] = useState("");
   const [settings, setSettings] = useState<any[]>([]);
+  const [modPosts, setModPosts] = useState<ModPost[]>([]);
+  const [modFilter, setModFilter] = useState<"active" | "removed">("active");
+  const [reports, setReports] = useState<ContentReport[]>([]);
+  const [reportFilter, setReportFilter] = useState<"open" | "resolved">("open");
 
   // Redirect if not super admin (once roles resolved)
   useEffect(() => {
