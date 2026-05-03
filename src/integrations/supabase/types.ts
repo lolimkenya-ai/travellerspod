@@ -1215,6 +1215,14 @@ export type Database = {
         }
         Returns: string
       }
+      remove_post: {
+        Args: { _post_id: string; _reason?: string }
+        Returns: undefined
+      }
+      resolve_report: {
+        Args: { _note?: string; _remove_post?: boolean; _report_id: string }
+        Returns: undefined
+      }
       restore_post: { Args: { _post_id: string }; Returns: undefined }
       revoke_role: {
         Args: {
