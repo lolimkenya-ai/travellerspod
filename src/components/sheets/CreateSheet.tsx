@@ -456,12 +456,13 @@ export function CreateSheet({ open, onOpenChange, onCreated, quotePostId, quoteS
                 <span>{caption.length}/2200</span>
               </div>
 
-              <input
-                value={location}
-                onChange={(e) => setLocation(e.target.value.slice(0, 120))}
-                placeholder="Location (e.g. Uluwatu, Bali)"
-                className="mt-3 w-full rounded-full border border-border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+              <div className="mt-3">
+                <LocationPicker
+                  value={location}
+                  onChange={(v) => setLocation(v.slice(0, 120))}
+                  placeholder="Location (e.g. Uluwatu, Bali)"
+                />
+              </div>
 
               {categories.length > 0 && (
                 <div className="mt-3">
