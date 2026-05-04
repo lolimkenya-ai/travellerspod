@@ -220,7 +220,11 @@ export default function EditBusiness() {
         </Field>
 
         <Field label="Address">
-          <input value={form.address ?? ""} onChange={(e) => patch("address", e.target.value)} className="input" />
+          <LocationPicker
+            value={form.address ?? ""}
+            onChange={(v) => patch("address", v)}
+            placeholder="Search business address"
+          />
         </Field>
 
         <Field label="Country">
