@@ -14,6 +14,7 @@ import {
   uploadToBucket,
 } from "@/lib/uploads";
 import { cn } from "@/lib/utils";
+import { LocationPicker } from "@/components/LocationPicker";
 
 interface Props {
   open: boolean;
