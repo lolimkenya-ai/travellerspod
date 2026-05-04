@@ -90,6 +90,8 @@ const App = () => (
                   <Route path="/superadmin" element={<ProtectedRoute require="super_admin"><SuperadminDashboard /></ProtectedRoute>} />
                   <Route path="/post/:id" element={<PostDetail />} />
                   <Route path="/privacy" element={<PrivacyPolicy />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/business" element={<ProtectedRoute><BusinessDashboard /></ProtectedRoute>} />
                   <Route path="/admin" element={<Navigate to="/access" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
