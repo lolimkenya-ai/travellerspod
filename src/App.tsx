@@ -35,6 +35,8 @@ import PostDetail from "./pages/PostDetail";
 import Reports from "./pages/Reports";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import ResetPassword from "./pages/ResetPassword";
+import BusinessDashboard from "./pages/BusinessDashboard";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
