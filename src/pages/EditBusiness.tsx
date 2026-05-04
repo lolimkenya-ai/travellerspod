@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/useCategories";
 import { toast } from "sonner";
 import { z } from "zod";
+import { LocationPicker } from "@/components/LocationPicker";
 
 const schema = z.object({
   category_slug: z.string().nullable(),
@@ -219,7 +220,11 @@ export default function EditBusiness() {
         </Field>
 
         <Field label="Address">
-          <input value={form.address ?? ""} onChange={(e) => patch("address", e.target.value)} className="input" />
+          <LocationPicker
+            value={form.address ?? ""}
+            onChange={(v) => patch("address", v)}
+            placeholder="Search business address"
+          />
         </Field>
 
         <Field label="Country">

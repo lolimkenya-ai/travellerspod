@@ -8,6 +8,7 @@ import { CommentSheet } from "../sheets/CommentSheet";
 import { RepostSheet } from "../sheets/RepostSheet";
 import { SaveBoardSheet } from "../sheets/SaveBoardSheet";
 import { ReportSheet } from "../sheets/ReportSheet";
+import { EnquiryFormSheet } from "../sheets/EnquiryFormSheet";
 import { getUser } from "@/data/users";
 import {
   DropdownMenu,
@@ -20,13 +21,13 @@ import type { Post } from "@/data/types";
 export function PostCard({ post }: { post: Post }) {
   const navigate = useNavigate();
   const author = getUser(post.authorId);
-  const [openSheet, setOpenSheet] = useState<null | "comment" | "repost" | "save" | "report">(null);
+  const [openSheet, setOpenSheet] = useState<null | "comment" | "repost" | "save" | "report" | "enquire">(null);
   const [galleryIdx, setGalleryIdx] = useState(0);
 
   const showInquire = author.accountType === "business" && author.verified;
 
   const handleInquire = () => {
-    navigate(`/messages/new?to=${post.authorId}&postId=${post.id}&inquiry=1`);
+    setOpenSheet("enquire");
   };
 
   // Build a unified gallery: cover + extras (only for image posts).
@@ -229,6 +230,14 @@ export function PostCard({ post }: { post: Post }) {
       <RepostSheet open={openSheet === "repost"} onOpenChange={(o) => setOpenSheet(o ? "repost" : null)} post={post} />
       <SaveBoardSheet open={openSheet === "save"} onOpenChange={(o) => setOpenSheet(o ? "save" : null)} post={post} />
       <ReportSheet open={openSheet === "report"} onOpenChange={(o) => setOpenSheet(o ? "report" : null)} postId={post.id} />
+      <EnquiryFormSheet
+        open={openSheet === "enquire"}
+        onOpenChange={(o) => setOpenSheet(o ? "enquire" : null)}
+        toUserId={post.authorId}
+        postId={post.id}
+        postCaption={post.caption}
+        postLocation={(post as any).location ?? null}
+      />
     </article>
   );
 }

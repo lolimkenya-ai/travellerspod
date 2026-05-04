@@ -35,6 +35,8 @@ import PostDetail from "./pages/PostDetail";
 import Reports from "./pages/Reports";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import ResetPassword from "./pages/ResetPassword";
+import BusinessDashboard from "./pages/BusinessDashboard";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -88,6 +90,8 @@ const App = () => (
                   <Route path="/superadmin" element={<ProtectedRoute require="super_admin"><SuperadminDashboard /></ProtectedRoute>} />
                   <Route path="/post/:id" element={<PostDetail />} />
                   <Route path="/privacy" element={<PrivacyPolicy />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/business" element={<ProtectedRoute><BusinessDashboard /></ProtectedRoute>} />
                   <Route path="/admin" element={<Navigate to="/access" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>

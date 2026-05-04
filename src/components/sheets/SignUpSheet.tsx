@@ -154,6 +154,15 @@ export function SignUpSheet() {
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                 {mode === "signup" ? "Create account" : "Sign in"}
               </button>
+              {mode === "signin" && (
+                <a
+                  href="/reset-password"
+                  onClick={() => { closeSignUp(); reset(); }}
+                  className="block text-center text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Forgot password?
+                </a>
+              )}
             </>
           )}
 
