@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
 import type { Session, User as SupaUser } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -32,13 +32,48 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const AUTH_URL_KEYS = [
+  "access_token",
+  "refresh_token",
+  "expires_in",
+  "expires_at",
+  "token_type",
+  "type",
+  "provider_token",
+  "provider_refresh_token",
+  "state",
+  "error",
+  "error_description",
+] as const;
+
+function getOAuthTokensFromUrl() {
+  if (typeof window === "undefined") return null;
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const searchParams = new URLSearchParams(window.location.search);
+
+  const access_token = hashParams.get("access_token") ?? searchParams.get("access_token");
+  const refresh_token = hashParams.get("refresh_token") ?? searchParams.get("refresh_token");
+
+  if (!access_token || !refresh_token) return null;
+  return { access_token, refresh_token };
+}
+
+function cleanAuthUrl() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  AUTH_URL_KEYS.forEach((key) => url.searchParams.delete(key));
+  url.hash = "";
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SupaUser | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSignUp, setShowSignUp] = useState(false);
+  const profileLoadId = useRef(0);
 
-  const loadProfile = useCallback(async (userId: string, retryCount = 0) => {
+  const loadProfile = useCallback(async (userId: string, retryCount = 0, loadId = profileLoadId.current) => {
     try {
       console.log("📋 Loading profile for user:", userId);
 
@@ -53,13 +88,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
+      if (loadId !== profileLoadId.current) return;
+
       if (data) {
         console.log("✅ Profile loaded successfully");
         setProfile(data as AuthProfile);
       } else if (retryCount < 3) {
         // Profile might still be created by the DB trigger — retry
         console.log(`⏳ Profile not found, retrying (${retryCount + 1}/3)...`);
-        setTimeout(() => loadProfile(userId, retryCount + 1), 600);
+        setTimeout(() => loadProfile(userId, retryCount + 1, loadId), 600);
       } else {
         console.warn("⚠️ Profile not found after retries");
         setProfile(null);
@@ -68,17 +105,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("❌ Error loading profile:", err);
       if (retryCount < 3) {
         console.log(`⏳ Retrying profile load (${retryCount + 1}/3)...`);
-        setTimeout(() => loadProfile(userId, retryCount + 1), 600);
+        setTimeout(() => loadProfile(userId, retryCount + 1, loadId), 600);
       }
     }
   }, []);
 
+  const applySession = useCallback((session: Session | null) => {
+    profileLoadId.current += 1;
+
+    if (session?.user) {
+      console.log("✅ Session active for user:", session.user.id);
+      setUser(session.user);
+      void loadProfile(session.user.id, 0, profileLoadId.current);
+    } else {
+      console.log("ℹ️ No active session found");
+      setUser(null);
+      setProfile(null);
+    }
+  }, [loadProfile]);
+
   useEffect(() => {
     let mounted = true;
+    let initialSessionHandled = false;
 
-    const checkSession = async () => {
+    const restoreSession = async () => {
       try {
         console.log("🔍 Checking existing session...");
+
+        const oauthTokens = getOAuthTokensFromUrl();
+        if (oauthTokens) {
+          const { data, error } = await supabase.auth.setSession(oauthTokens);
+          cleanAuthUrl();
+
+          if (error) {
+            console.error("❌ OAuth session restore error:", error);
+            throw error;
+          }
+
+          if (mounted) {
+            applySession(data.session);
+            setLoading(false);
+          }
+          return;
+        }
+
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
@@ -87,15 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (mounted) {
-          if (session?.user) {
-            console.log("✅ Session found for user:", session.user.id);
-            setUser(session.user);
-            await loadProfile(session.user.id);
-          } else {
-            console.log("ℹ️ No existing session found");
-            setUser(null);
-            setProfile(null);
-          }
+          applySession(session);
           setLoading(false);
         }
       } catch (err) {
@@ -108,56 +170,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    checkSession();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
       console.log("🔔 Auth event:", event, "Session:", session?.user?.id);
 
+      if (event === "INITIAL_SESSION" && !initialSessionHandled) {
+        return;
+      }
+
       if (event === "SIGNED_OUT") {
         console.log("👋 User signed out");
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-      } else if (
-        event === "SIGNED_IN" ||
-        event === "TOKEN_REFRESHED" ||
-        event === "USER_UPDATED"
-      ) {
-        if (session?.user) {
-          console.log("✅ User signed in/updated:", session.user.id);
-          setUser(session.user);
-          loadProfile(session.user.id);
-          setLoading(false);
-        }
-      } else if (event === "INITIAL_SESSION") {
-        console.log("🔄 Initial session check complete");
-        if (session?.user) {
-          setUser(session.user);
-          loadProfile(session.user.id);
-        } else {
-          setUser(null);
-          setProfile(null);
-        }
+        applySession(null);
         setLoading(false);
       } else {
-        if (session?.user) {
-          setUser(session.user);
-          loadProfile(session.user.id);
-        } else {
-          setUser(null);
-          setProfile(null);
-        }
+        applySession(session);
         setLoading(false);
       }
+    });
+
+    void restoreSession().finally(() => {
+      initialSessionHandled = true;
     });
 
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, [loadProfile]);
+  }, [applySession]);
 
   /** Force-refresh the profile from the DB (useful after edits). */
   const refreshProfile = useCallback(async () => {
