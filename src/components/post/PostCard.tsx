@@ -230,6 +230,14 @@ export function PostCard({ post }: { post: Post }) {
       <RepostSheet open={openSheet === "repost"} onOpenChange={(o) => setOpenSheet(o ? "repost" : null)} post={post} />
       <SaveBoardSheet open={openSheet === "save"} onOpenChange={(o) => setOpenSheet(o ? "save" : null)} post={post} />
       <ReportSheet open={openSheet === "report"} onOpenChange={(o) => setOpenSheet(o ? "report" : null)} postId={post.id} />
+      <EnquiryFormSheet
+        open={openSheet === "enquire"}
+        onOpenChange={(o) => setOpenSheet(o ? "enquire" : null)}
+        toUserId={post.authorId}
+        postId={post.id}
+        postCaption={post.caption}
+        postLocation={(post as any).location ?? null}
+      />
     </article>
   );
 }
