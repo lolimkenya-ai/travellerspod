@@ -8,6 +8,7 @@ import { CommentSheet } from "../sheets/CommentSheet";
 import { RepostSheet } from "../sheets/RepostSheet";
 import { SaveBoardSheet } from "../sheets/SaveBoardSheet";
 import { ReportSheet } from "../sheets/ReportSheet";
+import { EnquiryFormSheet } from "../sheets/EnquiryFormSheet";
 import { getUser } from "@/data/users";
 import {
   DropdownMenu,
