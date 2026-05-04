@@ -21,13 +21,13 @@ import type { Post } from "@/data/types";
 export function PostCard({ post }: { post: Post }) {
   const navigate = useNavigate();
   const author = getUser(post.authorId);
-  const [openSheet, setOpenSheet] = useState<null | "comment" | "repost" | "save" | "report">(null);
+  const [openSheet, setOpenSheet] = useState<null | "comment" | "repost" | "save" | "report" | "enquire">(null);
   const [galleryIdx, setGalleryIdx] = useState(0);
 
   const showInquire = author.accountType === "business" && author.verified;
 
   const handleInquire = () => {
-    navigate(`/messages/new?to=${post.authorId}&postId=${post.id}&inquiry=1`);
+    setOpenSheet("enquire");
   };
 
   // Build a unified gallery: cover + extras (only for image posts).
