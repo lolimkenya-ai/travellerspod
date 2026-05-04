@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/useCategories";
 import { toast } from "sonner";
 import { z } from "zod";
+import { LocationPicker } from "@/components/LocationPicker";
 
 const schema = z.object({
   category_slug: z.string().nullable(),
