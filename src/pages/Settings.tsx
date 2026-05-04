@@ -106,12 +106,19 @@ export default function Settings() {
       <Section title="Account">
         <Row to="/settings/profile" icon={<UserIcon className="h-4 w-4" />} label="Edit profile" />
         {isBusiness && (
-          <Row
-            to="/settings/business"
-            icon={<Briefcase className="h-4 w-4" />}
-            label="Business details"
-            right={<VerificationPill status={profile.verified ? "verified" : undefined} />}
-          />
+          <>
+            <Row
+              to="/business"
+              icon={<Briefcase className="h-4 w-4 text-primary" />}
+              label="Business dashboard"
+            />
+            <Row
+              to="/settings/business"
+              icon={<Briefcase className="h-4 w-4" />}
+              label="Business details"
+              right={<VerificationPill status={profile.verified ? "verified" : undefined} />}
+            />
+          </>
         )}
       </Section>
 
