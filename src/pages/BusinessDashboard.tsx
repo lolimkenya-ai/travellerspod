@@ -78,6 +78,27 @@ export default function BusinessDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  useEffect(() => {
+    if (tab !== "resources" || !user || verification !== "verified") return;
+    let cancelled = false;
+    (async () => {
+      setResourcesLoading(true);
+      const { data, error } = await supabase
+        .from("business_resources" as any)
+        .select("id, title, url, description, category, icon, sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false });
+      if (cancelled) return;
+      if (error) toast.error(error.message);
+      else setResources((data as any[]) ?? []);
+      setResourcesLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, user?.id, verification]);
+
   async function loadAll() {
     setLoading(true);
     try {
