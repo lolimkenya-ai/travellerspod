@@ -503,6 +503,63 @@ export default function BusinessDashboard() {
             </div>
           </div>
         )}
+
+        {tab === "resources" && (
+          <div className="space-y-3">
+            {verification !== "verified" ? (
+              <div className="rounded-2xl border border-border bg-card p-6 text-center">
+                <LinkIcon className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-foreground">Resources unlock once your business is verified.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Get verified to access curated external product links and tools.
+                </p>
+              </div>
+            ) : resourcesLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : resources.length === 0 ? (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                No resources have been published yet.
+              </p>
+            ) : (
+              groupBy(resources, (r) => r.category || "General").map(([cat, items]) => (
+                <div key={cat}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {cat}
+                  </p>
+                  <div className="space-y-2">
+                    {items.map((r: any) => (
+                      <a
+                        key={r.id}
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-xl border border-border bg-card p-3 transition-colors hover:bg-accent"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <LinkIcon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-foreground">{r.title}</p>
+                            {r.description && (
+                              <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                {r.description}
+                              </p>
+                            )}
+                            <p className="mt-1 truncate text-[11px] text-muted-foreground">{r.url}</p>
+                          </div>
+                          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
