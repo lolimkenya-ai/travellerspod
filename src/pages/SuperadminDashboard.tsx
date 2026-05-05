@@ -821,6 +821,165 @@ export default function SuperadminDashboard() {
               </div>
             )}
 
+            {/* ── RESOURCES ── */}
+            {activeTab === "resources" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    External product links shown to verified businesses on their dashboard.
+                  </p>
+                  <button
+                    onClick={() =>
+                      setEditingResource({
+                        title: "",
+                        url: "",
+                        description: "",
+                        category: "",
+                        icon: "",
+                        sort_order: 0,
+                        is_active: true,
+                      })
+                    }
+                    className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add resource
+                  </button>
+                </div>
+
+                {resources.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <LinkIcon className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">No resources yet</p>
+                  </div>
+                ) : (
+                  resources.map((r) => (
+                    <div key={r.id} className="rounded-xl border border-border bg-card p-3">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="truncate text-sm font-semibold text-foreground">{r.title}</h3>
+                            {!r.is_active && (
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                hidden
+                              </span>
+                            )}
+                            {r.category && (
+                              <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] text-foreground">
+                                {r.category}
+                              </span>
+                            )}
+                          </div>
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-0.5 block truncate text-xs text-primary hover:underline"
+                          >
+                            {r.url}
+                          </a>
+                          {r.description && (
+                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{r.description}</p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <button
+                            onClick={() => setEditingResource(r)}
+                            className="rounded-full p-1.5 hover:bg-accent"
+                            aria-label="Edit"
+                          >
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={() => deleteResource(r.id)}
+                            className="rounded-full p-1.5 hover:bg-accent"
+                            aria-label="Delete"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                {editingResource && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-xl">
+                      <h2 className="mb-3 text-base font-bold text-foreground">
+                        {editingResource.id ? "Edit resource" : "New resource"}
+                      </h2>
+                      <div className="space-y-2">
+                        <input
+                          placeholder="Title *"
+                          value={editingResource.title ?? ""}
+                          onChange={(e) => setEditingResource({ ...editingResource, title: e.target.value })}
+                          className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm"
+                        />
+                        <input
+                          placeholder="URL * (https://...)"
+                          value={editingResource.url ?? ""}
+                          onChange={(e) => setEditingResource({ ...editingResource, url: e.target.value })}
+                          className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm"
+                        />
+                        <textarea
+                          placeholder="Description"
+                          value={editingResource.description ?? ""}
+                          onChange={(e) =>
+                            setEditingResource({ ...editingResource, description: e.target.value })
+                          }
+                          className="h-20 w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <input
+                            placeholder="Category"
+                            value={editingResource.category ?? ""}
+                            onChange={(e) =>
+                              setEditingResource({ ...editingResource, category: e.target.value })
+                            }
+                            className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-sm"
+                          />
+                          <input
+                            type="number"
+                            placeholder="Sort"
+                            value={editingResource.sort_order ?? 0}
+                            onChange={(e) =>
+                              setEditingResource({ ...editingResource, sort_order: e.target.value })
+                            }
+                            className="w-20 rounded-lg border border-border bg-muted px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={editingResource.is_active !== false}
+                            onChange={(e) =>
+                              setEditingResource({ ...editingResource, is_active: e.target.checked })
+                            }
+                          />
+                          Active (visible to verified businesses)
+                        </label>
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          disabled={resourceBusy}
+                          onClick={() => saveResource(editingResource)}
+                          className="flex-1 rounded-full bg-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                        >
+                          {resourceBusy ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => setEditingResource(null)}
+                          className="flex-1 rounded-full border border-border py-2 text-sm font-semibold text-foreground hover:bg-accent"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── SETTINGS ── */}
             {activeTab === "settings" && (
               <div className="space-y-4">
