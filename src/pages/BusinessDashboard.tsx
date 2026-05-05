@@ -625,3 +625,13 @@ function VerifPill({ status }: { status: string }) {
     </span>
   );
 }
+
+function groupBy<T>(arr: T[], keyFn: (x: T) => string): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const item of arr) {
+    const k = keyFn(item);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k)!.push(item);
+  }
+  return Array.from(map.entries());
+}
