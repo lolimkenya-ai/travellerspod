@@ -292,6 +292,7 @@ export default function BusinessDashboard() {
             ["inquiries", "Inquiries", Inbox],
             ["team", "Team", Users],
             ["verification", "Verification", ShieldCheck],
+            ["resources", "Resources", LinkIcon],
           ] as const
         ).map(([k, label, Icon]) => (
           <button
