@@ -62,6 +62,8 @@ export default function BusinessDashboard() {
   const [convs, setConvs] = useState<ConvRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [verification, setVerification] = useState<string>("unverified");
+  const [resources, setResources] = useState<any[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addEmail, setAddEmail] = useState("");
   const [addBusy, setAddBusy] = useState(false);
