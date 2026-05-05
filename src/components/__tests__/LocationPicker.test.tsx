@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { LocationPicker } from "../LocationPicker";
 
-const DEBOUNCE = 350;
+// Real timers + tiny waits — the component debounces 350ms.
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("LocationPicker edge cases", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.restoreAllMocks();
   });
   afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("shows no results dropdown when Nominatim returns empty array", async () => {
@@ -22,16 +22,12 @@ describe("LocationPicker edge cases", () => {
 
     const onChange = vi.fn();
     render(<LocationPicker value="" onChange={onChange} />);
-
     const input = screen.getByPlaceholderText(/search a city/i);
     fireEvent.change(input, { target: { value: "asdfghjklqwerty" } });
 
-    await act(async () => {
-      vi.advanceTimersByTime(DEBOUNCE + 10);
-    });
+    await wait(450);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    // No <li> options rendered
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
     expect(onChange).toHaveBeenCalledWith("asdfghjklqwerty");
   });
@@ -44,34 +40,26 @@ describe("LocationPicker edge cases", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const onChange = vi.fn();
-    render(<LocationPicker value="" onChange={onChange} />);
-
+    render(<LocationPicker value="" onChange={vi.fn()} />);
     const input = screen.getByPlaceholderText(/search a city/i);
     fireEvent.change(input, { target: { value: "Paris" } });
 
-    await act(async () => {
-      vi.advanceTimersByTime(DEBOUNCE + 10);
-    });
+    await wait(450);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
-    // Component still renders the input
     expect(input).toBeInTheDocument();
   });
 
   it("does not call fetch for queries shorter than 2 chars", async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<LocationPicker value="" onChange={vi.fn()} />);
     const input = screen.getByPlaceholderText(/search a city/i);
     fireEvent.change(input, { target: { value: "a" } });
 
-    await act(async () => {
-      vi.advanceTimersByTime(DEBOUNCE + 50);
-    });
-
+    await wait(450);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -87,9 +75,7 @@ describe("LocationPicker edge cases", () => {
     fireEvent.change(input, { target: { value: "Pari" } });
     fireEvent.change(input, { target: { value: "Paris" } });
 
-    await act(async () => {
-      vi.advanceTimersByTime(DEBOUNCE + 10);
-    });
+    await wait(500);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock.mock.calls[0][0]).toContain("q=Paris");
   });
