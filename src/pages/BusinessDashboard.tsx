@@ -18,13 +18,14 @@ import {
   MessageCircle,
   Bookmark,
   Plus,
+  Link as LinkIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-type Tab = "overview" | "posts" | "inquiries" | "team" | "verification";
+type Tab = "overview" | "posts" | "inquiries" | "team" | "verification" | "resources";
 
 interface PostRow {
   id: string;
@@ -61,6 +62,8 @@ export default function BusinessDashboard() {
   const [convs, setConvs] = useState<ConvRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [verification, setVerification] = useState<string>("unverified");
+  const [resources, setResources] = useState<any[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addEmail, setAddEmail] = useState("");
   const [addBusy, setAddBusy] = useState(false);
@@ -74,6 +77,27 @@ export default function BusinessDashboard() {
     void loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useEffect(() => {
+    if (tab !== "resources" || !user || verification !== "verified") return;
+    let cancelled = false;
+    (async () => {
+      setResourcesLoading(true);
+      const { data, error } = await supabase
+        .from("business_resources" as any)
+        .select("id, title, url, description, category, icon, sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false });
+      if (cancelled) return;
+      if (error) toast.error(error.message);
+      else setResources((data as any[]) ?? []);
+      setResourcesLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, user?.id, verification]);
 
   async function loadAll() {
     setLoading(true);
@@ -289,6 +313,7 @@ export default function BusinessDashboard() {
             ["inquiries", "Inquiries", Inbox],
             ["team", "Team", Users],
             ["verification", "Verification", ShieldCheck],
+            ["resources", "Resources", LinkIcon],
           ] as const
         ).map(([k, label, Icon]) => (
           <button
@@ -499,6 +524,63 @@ export default function BusinessDashboard() {
             </div>
           </div>
         )}
+
+        {tab === "resources" && (
+          <div className="space-y-3">
+            {verification !== "verified" ? (
+              <div className="rounded-2xl border border-border bg-card p-6 text-center">
+                <LinkIcon className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-foreground">Resources unlock once your business is verified.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Get verified to access curated external product links and tools.
+                </p>
+              </div>
+            ) : resourcesLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : resources.length === 0 ? (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                No resources have been published yet.
+              </p>
+            ) : (
+              groupBy(resources, (r) => r.category || "General").map(([cat, items]) => (
+                <div key={cat}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {cat}
+                  </p>
+                  <div className="space-y-2">
+                    {items.map((r: any) => (
+                      <a
+                        key={r.id}
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-xl border border-border bg-card p-3 transition-colors hover:bg-accent"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <LinkIcon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-foreground">{r.title}</p>
+                            {r.description && (
+                              <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                {r.description}
+                              </p>
+                            )}
+                            <p className="mt-1 truncate text-[11px] text-muted-foreground">{r.url}</p>
+                          </div>
+                          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -542,4 +624,14 @@ function VerifPill({ status }: { status: string }) {
       <ShieldAlert className="h-3 w-3" /> Unverified
     </span>
   );
+}
+
+function groupBy<T>(arr: T[], keyFn: (x: T) => string): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const item of arr) {
+    const k = keyFn(item);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k)!.push(item);
+  }
+  return Array.from(map.entries());
 }
