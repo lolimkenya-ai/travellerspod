@@ -23,6 +23,9 @@ import {
   FileText,
   RefreshCw,
   ArrowLeft,
+  Link as LinkIcon,
+  Plus,
+  Pencil,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -74,7 +77,7 @@ interface ManagedUser {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-const TABS = ["overview", "moderation", "reports", "users", "audit", "flags", "settings"] as const;
+const TABS = ["overview", "moderation", "reports", "users", "audit", "flags", "resources", "settings"] as const;
 type Tab = typeof TABS[number];
 
 interface ModPost {
