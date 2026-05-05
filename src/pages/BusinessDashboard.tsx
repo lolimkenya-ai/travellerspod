@@ -18,13 +18,14 @@ import {
   MessageCircle,
   Bookmark,
   Plus,
+  Link as LinkIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-type Tab = "overview" | "posts" | "inquiries" | "team" | "verification";
+type Tab = "overview" | "posts" | "inquiries" | "team" | "verification" | "resources";
 
 interface PostRow {
   id: string;
