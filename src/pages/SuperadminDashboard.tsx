@@ -124,6 +124,69 @@ export default function SuperadminDashboard() {
   const [modFilter, setModFilter] = useState<"active" | "removed">("active");
   const [reports, setReports] = useState<ContentReport[]>([]);
   const [reportFilter, setReportFilter] = useState<"open" | "resolved">("open");
+  const [resources, setResources] = useState<any[]>([]);
+  const [editingResource, setEditingResource] = useState<any | null>(null);
+  const [resourceBusy, setResourceBusy] = useState(false);
+
+  const loadResources = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("business_resources" as any)
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setResources((data as any[]) ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "resources") void loadResources();
+  }, [activeTab, loadResources]);
+
+  async function saveResource(r: any) {
+    setResourceBusy(true);
+    try {
+      const payload = {
+        title: r.title?.trim() ?? "",
+        url: r.url?.trim() ?? "",
+        description: r.description?.trim() || null,
+        category: r.category?.trim() || null,
+        icon: r.icon?.trim() || null,
+        sort_order: Number(r.sort_order) || 0,
+        is_active: r.is_active !== false,
+      };
+      if (!payload.title || !payload.url) {
+        toast.error("Title and URL required");
+        return;
+      }
+      if (r.id) {
+        const { error } = await supabase.from("business_resources" as any).update(payload).eq("id", r.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("business_resources" as any).insert({ ...payload, created_by: user?.id });
+        if (error) throw error;
+      }
+      toast.success("Saved");
+      setEditingResource(null);
+      await loadResources();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed");
+    } finally {
+      setResourceBusy(false);
+    }
+  }
+
+  async function deleteResource(id: string) {
+    if (!confirm("Delete this resource?")) return;
+    const { error } = await supabase.from("business_resources" as any).delete().eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setResources((rs) => rs.filter((x) => x.id !== id));
+  }
 
   // Redirect if not super admin (once roles resolved)
   useEffect(() => {
