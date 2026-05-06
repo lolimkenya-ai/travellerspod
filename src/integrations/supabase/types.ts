@@ -83,6 +83,81 @@ export type Database = {
         }
         Relationships: []
       }
+      b2b_external_links: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          label: string
+          sort_order: number
+          url: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          label: string
+          sort_order?: number
+          url: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          url?: string
+        }
+        Relationships: []
+      }
+      b2b_listings: {
+        Row: {
+          business_id: string
+          category: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          external_url: string | null
+          id: string
+          is_active: boolean
+          price: number | null
+          sort_order: number
+          title: string
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          category?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          is_active?: boolean
+          price?: number | null
+          sort_order?: number
+          title: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          category?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          is_active?: boolean
+          price?: number | null
+          sort_order?: number
+          title?: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       board_posts: {
         Row: {
           added_at: string
@@ -413,6 +488,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_b2b: boolean
           is_inquiry: boolean
           last_message: string | null
           last_message_at: string
@@ -420,6 +496,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_b2b?: boolean
           is_inquiry?: boolean
           last_message?: string | null
           last_message_at?: string
@@ -427,6 +504,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_b2b?: boolean
           is_inquiry?: boolean
           last_message?: string | null
           last_message_at?: string
@@ -1223,6 +1301,7 @@ export type Database = {
         Args: { _conv: string; _user: string }
         Returns: boolean
       }
+      is_verified_business: { Args: { _user: string }; Returns: boolean }
       log_admin_action: {
         Args: {
           _action: string
@@ -1293,10 +1372,12 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      start_dm: {
-        Args: { _is_inquiry?: boolean; _other: string }
-        Returns: string
-      }
+      start_dm:
+        | { Args: { _is_inquiry?: boolean; _other: string }; Returns: string }
+        | {
+            Args: { _is_b2b?: boolean; _is_inquiry?: boolean; _other: string }
+            Returns: string
+          }
       takedown_post: {
         Args: { _post_id: string; _reason: string }
         Returns: undefined
