@@ -3,7 +3,7 @@ import { MapPin, BadgeCheck } from "lucide-react";
 import { getUser } from "@/data/users";
 import { formatCount, timeAgo } from "@/lib/format";
 import { useState } from "react";
-import { useRequireAuth } from "@/contexts/AuthContext";
+import { useAuth, useRequireAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { VerifiedBusinessModal } from "@/components/profile/VerifiedBusinessModal";
 import type { Post } from "@/data/types";
@@ -13,6 +13,8 @@ export function AuthorChip({ post }: { post: Post }) {
   const [following, setFollowing] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
   const requireAuth = useRequireAuth();
+  const { user } = useAuth();
+  const isSelf = !!user && user.id === post.authorId;
 
   return (
     <div className="flex items-start gap-3">
@@ -52,17 +54,19 @@ export function AuthorChip({ post }: { post: Post }) {
           <span>{formatCount(author.followers)} followers</span>
         </div>
       </div>
-      <button
-        onClick={() => requireAuth(() => setFollowing((f) => !f))}
-        className={cn(
-          "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-          following
-            ? "bg-muted text-foreground"
-            : "bg-foreground text-background hover:bg-foreground/90",
-        )}
-      >
-        {following ? "Following" : "Follow"}
-      </button>
+      {!isSelf && (
+        <button
+          onClick={() => requireAuth(() => setFollowing((f) => !f))}
+          className={cn(
+            "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+            following
+              ? "bg-muted text-foreground"
+              : "bg-foreground text-background hover:bg-foreground/90",
+          )}
+        >
+          {following ? "Following" : "Follow"}
+        </button>
+      )}
 
       <VerifiedBusinessModal
         open={bizOpen}
