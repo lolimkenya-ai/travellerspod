@@ -67,9 +67,9 @@ export default function B2BBusinessDetail() {
           .order("sort_order", { ascending: true }),
       ]);
       if (cancelled) return;
-      setProfile(prof as BizProfile | null);
-      setListings((ls as Listing[]) ?? []);
-      setLinks((ln as ExternalLink[]) ?? []);
+      setProfile((prof as unknown as BizProfile) ?? null);
+      setListings((ls as unknown as Listing[]) ?? []);
+      setLinks((ln as unknown as ExternalLink[]) ?? []);
       setLoading(false);
     })();
     return () => {
