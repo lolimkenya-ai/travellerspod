@@ -37,6 +37,7 @@ import SuperadminDashboard from "./pages/SuperadminDashboard";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import ResetPassword from "./pages/ResetPassword";
 import BusinessDashboard from "./pages/BusinessDashboard";
+import B2BBusinessDetail from "./pages/B2BBusinessDetail";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
