@@ -19,13 +19,15 @@ import {
   Bookmark,
   Plus,
   Link as LinkIcon,
+  Building2,
 } from "lucide-react";
+import B2BMarketplaceTab from "@/components/business/B2BMarketplaceTab";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-type Tab = "overview" | "posts" | "inquiries" | "team" | "verification" | "resources";
+type Tab = "overview" | "posts" | "inquiries" | "team" | "verification" | "resources" | "b2b";
 
 interface PostRow {
   id: string;
@@ -314,6 +316,7 @@ export default function BusinessDashboard() {
             ["team", "Team", Users],
             ["verification", "Verification", ShieldCheck],
             ["resources", "Resources", LinkIcon],
+            ["b2b", "B2B Marketplace", Building2],
           ] as const
         ).map(([k, label, Icon]) => (
           <button
@@ -580,6 +583,10 @@ export default function BusinessDashboard() {
               ))
             )}
           </div>
+        )}
+
+        {tab === "b2b" && (
+          <B2BMarketplaceTab verified={verification === "verified"} />
         )}
       </div>
     </div>

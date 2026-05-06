@@ -37,6 +37,7 @@ import SuperadminDashboard from "./pages/SuperadminDashboard";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import ResetPassword from "./pages/ResetPassword";
 import BusinessDashboard from "./pages/BusinessDashboard";
+import B2BBusinessDetail from "./pages/B2BBusinessDetail";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -92,6 +93,7 @@ const App = () => (
                   <Route path="/privacy" element={<PrivacyPolicy />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/business" element={<ProtectedRoute><BusinessDashboard /></ProtectedRoute>} />
+                  <Route path="/business/b2b/:id" element={<ProtectedRoute><B2BBusinessDetail /></ProtectedRoute>} />
                   <Route path="/admin" element={<Navigate to="/access" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
