@@ -188,7 +188,11 @@ export default function MessageThread() {
     });
     setSending(false);
     if (error) {
-      toast.error(error.message);
+      if (/follow/i.test(error.message)) {
+        toast.error("You can only message people who follow you back.");
+      } else {
+        toast.error(error.message);
+      }
       return;
     }
     setDraft("");

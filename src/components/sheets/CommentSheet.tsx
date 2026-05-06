@@ -75,7 +75,7 @@ export function CommentSheet({ open, onOpenChange, post }: Props) {
       if (!user) return;
       if (!clientCooldown(`comment-${post.id}`, 600)) return;
       setPosting(true);
-      const ok = await rateLimit("comment", 20, 3600);
+      const ok = await rateLimit("comment", 30, 60);
       if (!ok) {
         setPosting(false);
         return;
