@@ -46,7 +46,7 @@ export function usePostLike(postId: string, initialCount: number) {
     if (busy) return;
     setBusy(true);
 
-    const ok = await rateLimit("like", 20, 3600); // 20 likes per hour
+    const ok = await rateLimit("like", 60, 60); // 60 likes per minute
     if (!ok) {
       setBusy(false);
       return;
