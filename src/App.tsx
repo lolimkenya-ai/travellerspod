@@ -93,6 +93,7 @@ const App = () => (
                   <Route path="/privacy" element={<PrivacyPolicy />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/business" element={<ProtectedRoute><BusinessDashboard /></ProtectedRoute>} />
+                  <Route path="/business/b2b/:id" element={<ProtectedRoute><B2BBusinessDetail /></ProtectedRoute>} />
                   <Route path="/admin" element={<Navigate to="/access" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
