@@ -142,18 +142,35 @@ async function checkWebsiteReputation(website: string): Promise<{
     return { isActive: false, hasSSL: false, reputationScore: 0 };
   }
 
+  // Validate URL: only allow https, reject private/loopback hosts (SSRF guard)
+  let parsed: URL;
   try {
-    // Check if website is accessible and has SSL
-    const url = website.startsWith("http") ? website : `https://${website}`;
-    const response = await fetch(url, {
+    const raw = website.startsWith("http") ? website : `https://${website}`;
+    parsed = new URL(raw);
+  } catch {
+    return { isActive: false, hasSSL: false, reputationScore: 0 };
+  }
+
+  if (parsed.protocol !== "https:") {
+    return { isActive: false, hasSSL: false, reputationScore: 0 };
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const privateHostRe =
+    /^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|::1|fc|fd|fe80)/i;
+  if (privateHostRe.test(host) || host.endsWith(".local") || host.endsWith(".internal")) {
+    return { isActive: false, hasSSL: false, reputationScore: 0 };
+  }
+
+  try {
+    const response = await fetch(parsed.toString(), {
       method: "HEAD",
-      redirect: "follow",
+      redirect: "manual", // don't follow redirects (could redirect to internal hosts)
     }).catch(() => null);
 
     const isActive = response?.ok || false;
-    const hasSSL = url.startsWith("https");
+    const hasSSL = true;
 
-    // Simple reputation check based on domain characteristics
     let reputationScore = 50;
     if (hasSSL) reputationScore += 20;
     if (isActive) reputationScore += 20;
